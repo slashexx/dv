@@ -1,9 +1,9 @@
 import matplotlib.pyplot as plt
-import numpy as np
+import pandas as pd
 
 df = pd.read_csv("Melasaleswithdays.csv")
 
-df.plot(kind="line", x="Days", color=["red", "blue", "brown"])
+df.plot(kind="line", x="Day", color=["red", "blue", "brown"])
 
 plt.xlabel("Days")
 plt.ylabel("Sales")
