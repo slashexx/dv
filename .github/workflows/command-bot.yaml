@@ -6,16 +6,17 @@ on:
 
 permissions:
   issues: write
+  pull-requests: write
 
 jobs:
   process-command:
     runs-on: ubuntu-latest
     steps:
-      - name: Assign Issue on /assign Command
+      - name: Process Commands
         uses: actions/github-script@v7
         with:
           script: |
-            const comment = context.payload.comment.body.trim();
+            const comment = context.payload.comment.body.trim().toLowerCase();
             const commenter = context.payload.comment.user.login;
             const issueNumber = context.issue.number;
             const repoOwner = context.repo.owner;
@@ -35,6 +36,40 @@ jobs:
                 issue_number: issueNumber,
                 body: `🛠️ Assigned issue #${issueNumber} to @${commenter}!`
               });
+            }
 
-              console.log(`Assigned issue #${issueNumber} to @${commenter} and commented.`);
+            if (comment === "/close") {
+              await github.rest.issues.update({
+                owner: repoOwner,
+                repo: repoName,
+                issue_number: issueNumber,
+                state: "closed"
+              });
+
+              await github.rest.issues.createComment({
+                owner: repoOwner,
+                repo: repoName,
+                issue_number: issueNumber,
+                body: `✅ Issue #${issueNumber} has been closed by @${commenter}.`
+              });
+            }
+
+            if (comment.startsWith("/label ")) {
+              const labelName = comment.replace("/label ", "").trim();
+
+              if (labelName) {
+                await github.rest.issues.addLabels({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: issueNumber,
+                  labels: [labelName]
+                });
+
+                await github.rest.issues.createComment({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: issueNumber,
+                  body: `🏷️ Added label **"${labelName}"** to issue #${issueNumber}.`
+                });
+              }
             }
