@@ -132,7 +132,7 @@ jobs:
                     owner: repoOwner,
                     repo: repoName,
                     issue_number: prNumber,
-                    body: `❌ ${error.message}`
+                    body: `❌ ${error.message} !`
                   });
                 }
               }
@@ -140,7 +140,7 @@ jobs:
               if (comment?.includes("/lgtm")) {
                 try {
                   if (commenter === prAuthor) {
-                    throw new Error("You cannot LGTM your own pull request");
+                    throw new Error("You cannot LGTM your own pull request ");
                   }
                   await handleLabel("lgtm", "0e8a16", "Looks Good To Me");
                 } catch (error) {
@@ -148,7 +148,7 @@ jobs:
                     owner: repoOwner,
                     repo: repoName,
                     issue_number: prNumber,
-                    body: `❌ ${error.message}`
+                    body: `❌ ${error.message} !`
                   });
                 }
               }
@@ -209,7 +209,7 @@ jobs:
                       owner: repoOwner,
                       repo: repoName,
                       issue_number: prNumber,
-                      body: `❌ Failed to add kind label: ${kindLabel}. ${error.message}`
+                      body: `❌ Failed to add kind label: ${kindLabel}. ${error.message} !`
                     });
                   }
                 }
@@ -219,6 +219,6 @@ jobs:
                 owner: repoOwner,
                 repo: repoName,
                 issue_number: prNumber,
-                body: `❌ ${error.message}`
+                body: `❌ ${error.message} !`
               });
             }
