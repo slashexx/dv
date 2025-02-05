@@ -1,0 +1,173 @@
+name: PR Command Bot
+
+on:
+  pull_request_review_comment:
+    types: [created]
+  pull_request:
+    types: [opened, closed, reopened]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  process-command:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Process PR Commands
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comment = context.payload.comment?.body?.trim().toLowerCase();
+            const commenter = context.payload.comment?.user?.login;
+            const prNumber = context.issue.number;
+            const repoOwner = context.repo.owner;
+            const repoName = context.repo.repo;
+            const action = context.payload.action;
+            
+            // /assign command for PR
+            if (comment === "/assign" && action === "created") {
+              await github.rest.pulls.requestReviewers({
+                owner: repoOwner,
+                repo: repoName,
+                pull_number: prNumber,
+                reviewers: [commenter]
+              });
+
+              await github.rest.pulls.createComment({
+                owner: repoOwner,
+                repo: repoName,
+                pull_number: prNumber,
+                body: `🛠️ Assigned PR #${prNumber} to @${commenter}!`
+              });
+            }
+
+            // /close command for PR
+            if (comment?.startsWith("/close ") && action === "created") {
+              const closeReason = comment.replace("/close ", "").trim();
+
+              let reason = "";
+
+              if (closeReason === "not-planned") {
+                reason = "Not planned";
+              } else if (closeReason === "completed") {
+                reason = "Completed";
+              } else if (closeReason === "inactive") {
+                reason = "Inactive";
+              } else if (closeReason === "duplicate") {
+                reason = "Duplicate";
+              } else {
+                reason = "Closed"; // Default case
+              }
+
+              await github.rest.pulls.update({
+                owner: repoOwner,
+                repo: repoName,
+                pull_number: prNumber,
+                state: "closed"
+              });
+
+              await github.rest.pulls.createComment({
+                owner: repoOwner,
+                repo: repoName,
+                pull_number: prNumber,
+                body: `✅ PR #${prNumber} has been marked as **${reason}** by @${commenter}.`
+              });
+            }
+
+            // /reopen command for PR
+            if (comment === "/reopen" && action === "created") {
+              await github.rest.pulls.update({
+                owner: repoOwner,
+                repo: repoName,
+                pull_number: prNumber,
+                state: "open"
+              });
+
+              await github.rest.pulls.createComment({
+                owner: repoOwner,
+                repo: repoName,
+                pull_number: prNumber,
+                body: `🔄 PR #${prNumber} has been reopened by @${commenter}.`
+              });
+            }
+
+            // /merge command for PR
+            if (comment === "/merge" && action === "created") {
+              await github.rest.pulls.merge({
+                owner: repoOwner,
+                repo: repoName,
+                pull_number: prNumber,
+              });
+
+              await github.rest.pulls.createComment({
+                owner: repoOwner,
+                repo: repoName,
+                pull_number: prNumber,
+                body: `✅ PR #${prNumber} has been merged by @${commenter}.`
+              });
+            }
+
+            // /label command for PR
+            if (comment?.startsWith("/label ") && action === "created") {
+              const labelName = comment.replace("/label ", "").trim();
+  
+              if (labelName) {
+                try {
+                  await github.rest.issues.addLabels({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: prNumber,
+                    labels: [labelName]
+                  });
+
+                  await github.rest.pulls.createComment({
+                    owner: repoOwner,
+                    repo: repoName,
+                    pull_number: prNumber,
+                    body: `🏷️ Added label **"${labelName}"** to PR #${prNumber}.`
+                  });
+                } catch (error) {
+                  if (error.status === 404) {
+                    await github.rest.issues.createLabel({
+                      owner: repoOwner,
+                      repo: repoName,
+                      name: labelName,
+                      color: "0e8a16" 
+                    });
+
+                    await github.rest.issues.addLabels({
+                      owner: repoOwner,
+                      repo: repoName,
+                      issue_number: prNumber,
+                      labels: [labelName]
+                    });
+
+                    await github.rest.pulls.createComment({
+                      owner: repoOwner,
+                      repo: repoName,
+                      pull_number: prNumber,
+                      body: `🎨 Created and added label **"${labelName}"** (Color: Green) to PR #${prNumber}.`
+                    });
+                  } else {
+                    throw error;
+                  }
+                }
+              }
+            }
+
+            // /review command for PR
+            if (comment?.startsWith("/review ") && action === "created") {
+              const reviewType = comment.replace("/review ", "").trim();
+
+              const reviewState = reviewType === "approve" ? "APPROVE" : 
+                                 reviewType === "request" ? "REQUEST_CHANGES" : "COMMENT";
+
+              await github.rest.pulls.createReview({
+                owner: repoOwner,
+                repo: repoName,
+                pull_number: prNumber,
+                event: reviewState,
+                body: `PR #${prNumber} has been reviewed by @${commenter}.`
+              });
+            }
