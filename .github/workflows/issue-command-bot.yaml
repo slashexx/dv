@@ -22,128 +22,141 @@ jobs:
             const repoOwner = context.repo.owner;
             const repoName = context.repo.repo;
 
-            // /assign command
-            if (comment === "/assign") {
-              await github.rest.issues.addAssignees({
-                owner: repoOwner,
-                repo: repoName,
-                issue_number: issueNumber,
-                assignees: [commenter]
-              });
-            }
+            console.log("Received comment:", comment);
+            console.log("Commenter:", commenter);
+            console.log("Issue Number:", issueNumber);
 
-            // /close command
-            if (comment === "/close") {
-              await github.rest.issues.update({
-                owner: repoOwner,
-                repo: repoName,
-                issue_number: issueNumber,
-                state: "closed",
-                state_reason: "completed"
-              });
-            }
-
-            // /reopen command
-            if (comment === "/reopen") {
-              await github.rest.issues.update({
-                owner: repoOwner,
-                repo: repoName,
-                issue_number: issueNumber,
-                state: "open",
-                state_reason: "reopened"
-              });
-            }
-
-            // /label command
-            if (comment.startsWith("/label ")) {
-              const labelName = comment.replace("/label ", "").trim();
-              if (labelName) {
-                try {
+            // Helper function to handle labels
+            async function handleLabel(labelName, color, description) {
+              try {
+                await github.rest.issues.addLabels({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: issueNumber,
+                  labels: [labelName]
+                });
+              } catch (error) {
+                if (error.status === 404) {
+                  await github.rest.issues.createLabel({
+                    owner: repoOwner,
+                    repo: repoName,
+                    name: labelName,
+                    color: color || "0e8a16",
+                    description: description || ""
+                  });
+                  
                   await github.rest.issues.addLabels({
                     owner: repoOwner,
                     repo: repoName,
                     issue_number: issueNumber,
                     labels: [labelName]
                   });
-                } catch (error) {
-                  if (error.status === 404) {
-                    await github.rest.issues.createLabel({
-                      owner: repoOwner,
-                      repo: repoName,
-                      name: labelName,
-                      color: "0e8a16"
-                    });
-                    await github.rest.issues.addLabels({
-                      owner: repoOwner,
-                      repo: repoName,
-                      issue_number: issueNumber,
-                      labels: [labelName]
-                    });
-                  } else {
-                    throw error;
-                  }
-                }
-              }
-            }
-
-            // /help command
-            if (comment === "/help") {
-              const helpLabel = "help wanted";
-              try {
-                await github.rest.issues.addLabels({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: issueNumber,
-                  labels: [helpLabel]
-                });
-              } catch (error) {
-                if (error.status === 404) {
-                  await github.rest.issues.createLabel({
-                    owner: repoOwner,
-                    repo: repoName,
-                    name: helpLabel,
-                    color: "008672",
-                    description: "Extra attention is needed"
-                  });
-                  await github.rest.issues.addLabels({
-                    owner: repoOwner,
-                    repo: repoName,
-                    issue_number: issueNumber,
-                    labels: [helpLabel]
-                  });
                 } else {
                   throw error;
                 }
               }
             }
 
-            // /needs-triage command
-            if (comment === "/needs-triage") {
-              const triageLabel = "needs-triage";
-              try {
-                await github.rest.issues.addLabels({
+            // Helper function to extract command and args from comment
+            function parseCommand(comment, cmd) {
+              if (!comment?.includes(cmd)) return null;
+              const cmdIndex = comment.indexOf(cmd);
+              const afterCmd = comment.substring(cmdIndex + cmd.length).trim();
+              return afterCmd || null;
+            }
+
+            try {
+              // /assign command
+              if (comment?.includes("/assign")) {
+                await github.rest.issues.addAssignees({
                   owner: repoOwner,
                   repo: repoName,
                   issue_number: issueNumber,
-                  labels: [triageLabel]
+                  assignees: [commenter]
                 });
-              } catch (error) {
-                if (error.status === 404) {
-                  await github.rest.issues.createLabel({
-                    owner: repoOwner,
-                    repo: repoName,
-                    name: triageLabel,
-                    color: "d73a4a",
-                    description: "This issue needs triage"
-                  });
-                  await github.rest.issues.addLabels({
+                await github.rest.issues.createComment({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: issueNumber,
+                  body: `✅ @${commenter} has been assigned to this issue`
+                });
+              }
+
+              // /close command
+              if (comment?.includes("/close")) {
+                await github.rest.issues.update({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: issueNumber,
+                  state: "closed",
+                  state_reason: "completed"
+                });
+                await github.rest.issues.createComment({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: issueNumber,
+                  body: `✅ Issue closed by @${commenter}`
+                });
+              }
+
+              // /reopen command
+              if (comment?.includes("/reopen")) {
+                await github.rest.issues.update({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: issueNumber,
+                  state: "open"
+                });
+                await github.rest.issues.createComment({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: issueNumber,
+                  body: `✅ Issue reopened by @${commenter}`
+                });
+              }
+
+              // /label command
+              if (comment?.includes("/label")) {
+                const labelName = parseCommand(comment, "/label");
+                if (labelName) {
+                  await handleLabel(labelName, "0e8a16");
+                  await github.rest.issues.createComment({
                     owner: repoOwner,
                     repo: repoName,
                     issue_number: issueNumber,
-                    labels: [triageLabel]
+                    body: `✅ Added label: ${labelName}`
                   });
-                } else {
-                  throw error;
                 }
               }
+
+              // /help command
+              if (comment?.includes("/help")) {
+                await handleLabel("help wanted", "008672", "Extra attention is needed");
+                await github.rest.issues.createComment({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: issueNumber,
+                  body: `✅ Marked as needing help`
+                });
+              }
+
+              // /needs-triage command
+              if (comment?.includes("/needs-triage")) {
+                await handleLabel("needs-triage", "d73a4a", "This issue needs triage");
+                await github.rest.issues.createComment({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: issueNumber,
+                  body: `✅ Marked for triage`
+                });
+              }
+
+            } catch (error) {
+              console.error("Error processing command:", error);
+              await github.rest.issues.createComment({
+                owner: repoOwner,
+                repo: repoName,
+                issue_number: issueNumber,
+                body: `❌ Error: ${error.message}`
+              });
             }

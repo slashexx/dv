@@ -105,6 +105,14 @@ jobs:
               return reviewer;
             }
 
+            // Helper function to extract command and args from comment
+            function parseCommand(comment, cmd) {
+              if (!comment?.includes(cmd)) return null;
+              const cmdIndex = comment.indexOf(cmd);
+              const afterCmd = comment.substring(cmdIndex + cmd.length).trim();
+              return afterCmd || null;
+            }
+
             // Process /kind flag in PR description
             if ((action === "opened" || action === "edited") && isPR) {
               const description = context.payload.pull_request?.body?.trim() || "";
@@ -116,7 +124,6 @@ jobs:
                 const kindLabel = `kind/${kindValue}`;
                 
                 try {
-                  // First try to add the label
                   await github.rest.issues.addLabels({
                     owner: repoOwner,
                     repo: repoName,
@@ -126,7 +133,6 @@ jobs:
                 } catch (error) {
                   if (error.status === 404) {
                     try {
-                      // Create the kind label if it doesn't exist
                       await github.rest.issues.createLabel({
                         owner: repoOwner,
                         repo: repoName,
@@ -165,7 +171,7 @@ jobs:
             }
 
             // /assign command for PR (only for PR events)
-            if (comment === "/assign" && isPR && action === "created") {
+            if (comment?.includes("/assign") && isPR && action === "created") {
               await github.rest.pulls.requestReviewers({
                 owner: repoOwner,
                 repo: repoName,
@@ -175,8 +181,8 @@ jobs:
             }
 
             // /close command for PR
-            if (comment?.startsWith("/close ") && action === "created") {
-              const closeReason = comment.replace("/close ", "").trim();
+            if (comment?.includes("/close") && action === "created") {
+              const closeReason = parseCommand(comment, "/close");
 
               let reason = "";
 
@@ -201,7 +207,7 @@ jobs:
             }
 
             // /reopen command for PR
-            if (comment === "/reopen" && action === "created") {
+            if (comment?.includes("/reopen") && action === "created") {
               await github.rest.pulls.update({
                 owner: repoOwner,
                 repo: repoName,
@@ -211,7 +217,7 @@ jobs:
             }
 
             // /merge command for PR
-            if (comment === "/merge" && action === "created") {
+            if (comment?.includes("/merge") && action === "created") {
               await github.rest.pulls.merge({
                 owner: repoOwner,
                 repo: repoName,
@@ -220,8 +226,8 @@ jobs:
             }
 
             // /label command for PR
-            if (comment?.startsWith("/label ") && action === "created") {
-              const labelName = comment.replace("/label ", "").trim();
+            if (comment?.includes("/label") && action === "created") {
+              const labelName = parseCommand(comment, "/label");
   
               if (labelName) {
                 try {
@@ -254,10 +260,12 @@ jobs:
             }
 
             // /cc command for requesting reviews
-            if (comment?.startsWith("/cc") && action === "created") {
+            if (comment?.includes("/cc") && action === "created") {
               try {
-                // Extract username - everything after /cc
-                const reviewer = comment.substring(3).trim();
+                const reviewer = parseCommand(comment, "/cc");
+                if (!reviewer) {
+                  throw new Error("No reviewer specified");
+                }
                 console.log("CC command received for reviewer:", reviewer);
 
                 const added = await requestReviews(reviewer);
@@ -279,7 +287,7 @@ jobs:
             }
 
             // /lgtm command - simplified without maintainer check
-            if (comment === "/lgtm" && action === "created") {
+            if (comment?.includes("/lgtm") && action === "created") {
               try {
                 if (!isPR) {
                   throw new Error("/lgtm command can only be used on pull requests");
@@ -311,7 +319,7 @@ jobs:
             }
 
             // /approve command for maintainers
-            if (comment?.startsWith("/approve") && action === "created") {
+            if (comment?.includes("/approve") && action === "created") {
               if (await isMaintainer(commenter)) {
                 const isCancel = comment.includes("cancel");
                 const approvedLabel = "approved";
