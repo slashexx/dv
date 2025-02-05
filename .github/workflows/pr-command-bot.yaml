@@ -287,52 +287,106 @@ jobs:
 
               // /approve command for maintainers
               if (comment?.includes("/approve") && action === "created") {
-                if (await isMaintainer(commenter)) {
+                console.log("Processing /approve command from:", commenter);
+                
+                const isMaintainerResult = await isMaintainer(commenter);
+                console.log("Is maintainer check result:", isMaintainerResult);
+                
+                if (isMaintainerResult) {
                   const isCancel = comment.includes("cancel");
                   const approvedLabel = "approved";
                   
                   if (isCancel) {
+                    console.log("Processing approval cancellation");
                     try {
+                      // Remove approval review
+                      await github.rest.pulls.createReview({
+                        owner: repoOwner,
+                        repo: repoName,
+                        pull_number: prNumber,
+                        event: 'DISMISS',
+                        body: 'Approval cancelled'
+                      });
+                      
+                      // Remove label
                       await github.rest.issues.removeLabel({
                         owner: repoOwner,
                         repo: repoName,
                         issue_number: prNumber,
                         name: approvedLabel
                       });
+                      
+                      await github.rest.issues.createComment({
+                        owner: repoOwner,
+                        repo: repoName,
+                        issue_number: prNumber,
+                        body: `✅ @${commenter} has cancelled their approval`
+                      });
                     } catch (error) {
+                      console.error("Error cancelling approval:", error);
                       if (error.status !== 404) { // Ignore if label doesn't exist
                         throw error;
                       }
                     }
                   } else {
+                    console.log("Processing new approval");
                     try {
-                      await github.rest.issues.addLabels({
+                      // Submit approval review
+                      await github.rest.pulls.createReview({
                         owner: repoOwner,
                         repo: repoName,
-                        issue_number: prNumber,
-                        labels: [approvedLabel]
+                        pull_number: prNumber,
+                        event: 'APPROVE',
+                        body: 'Approved via command'
                       });
-                    } catch (error) {
-                      if (error.status === 404) {
-                        await github.rest.issues.createLabel({
-                          owner: repoOwner,
-                          repo: repoName,
-                          name: approvedLabel,
-                          color: "28a745", // GitHub green
-                          description: "Pull request has been approved by a maintainer"
-                        });
-
+                      
+                      // Add label
+                      try {
                         await github.rest.issues.addLabels({
                           owner: repoOwner,
                           repo: repoName,
                           issue_number: prNumber,
                           labels: [approvedLabel]
                         });
-                      } else {
-                        throw error;
+                      } catch (error) {
+                        if (error.status === 404) {
+                          await github.rest.issues.createLabel({
+                            owner: repoOwner,
+                            repo: repoName,
+                            name: approvedLabel,
+                            color: "28a745",
+                            description: "Pull request has been approved by a maintainer"
+                          });
+
+                          await github.rest.issues.addLabels({
+                            owner: repoOwner,
+                            repo: repoName,
+                            issue_number: prNumber,
+                            labels: [approvedLabel]
+                          });
+                        } else {
+                          throw error;
+                        }
                       }
+                      
+                      await github.rest.issues.createComment({
+                        owner: repoOwner,
+                        repo: repoName,
+                        issue_number: prNumber,
+                        body: `✅ @${commenter} has approved this pull request`
+                      });
+                    } catch (error) {
+                      console.error("Error approving PR:", error);
+                      throw error;
                     }
                   }
+                } else {
+                  await github.rest.issues.createComment({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: prNumber,
+                    body: `❌ @${commenter} does not have permission to approve pull requests`
+                  });
                 }
               }
 
