@@ -24,9 +24,11 @@ jobs:
             const repoOwner = context.repo.owner;
             const repoName = context.repo.repo;
             const action = context.payload.action;
-            
-            // /assign command for PR
-            if (comment === "/assign" && action === "created") {
+
+            const isPR = context.payload.pull_request !== undefined;
+
+            // /assign command for PR (only for PR events)
+            if (comment === "/assign" && isPR && action === "created") {
               await github.rest.pulls.requestReviewers({
                 owner: repoOwner,
                 repo: repoName,
