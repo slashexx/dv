@@ -90,13 +90,6 @@ jobs:
                 pull_number: prNumber,
                 reviewers: [commenter]
               });
-
-              await github.rest.issues.createComment({
-                owner: repoOwner,
-                repo: repoName,
-                issue_number: prNumber,
-                body: `🛠️ Added @${commenter} as a reviewer to PR #${prNumber}`
-              });
             }
 
             // /close command for PR
@@ -123,13 +116,6 @@ jobs:
                 pull_number: prNumber,
                 state: "closed"
               });
-
-              await github.rest.pulls.createComment({
-                owner: repoOwner,
-                repo: repoName,
-                pull_number: prNumber,
-                body: `✅ PR #${prNumber} has been marked as **${reason}** by @${commenter}.`
-              });
             }
 
             // /reopen command for PR
@@ -140,13 +126,6 @@ jobs:
                 pull_number: prNumber,
                 state: "open"
               });
-
-              await github.rest.pulls.createComment({
-                owner: repoOwner,
-                repo: repoName,
-                pull_number: prNumber,
-                body: `🔄 PR #${prNumber} has been reopened by @${commenter}.`
-              });
             }
 
             // /merge command for PR
@@ -155,13 +134,6 @@ jobs:
                 owner: repoOwner,
                 repo: repoName,
                 pull_number: prNumber,
-              });
-
-              await github.rest.pulls.createComment({
-                owner: repoOwner,
-                repo: repoName,
-                pull_number: prNumber,
-                body: `✅ PR #${prNumber} has been merged by @${commenter}.`
               });
             }
 
@@ -177,13 +149,6 @@ jobs:
                     issue_number: prNumber,  
                     labels: [labelName]
                   });
-
-                  await github.rest.pulls.createComment({
-                    owner: repoOwner,
-                    repo: repoName,
-                    pull_number: prNumber,
-                    body: `🏷️ Added label **"${labelName}"** to PR #${prNumber}.`
-                  });
                 } catch (error) {
                   if (error.status === 404) {
                     await github.rest.issues.createLabel({
@@ -198,13 +163,6 @@ jobs:
                       repo: repoName,
                       issue_number: prNumber,
                       labels: [labelName]
-                    });
-
-                    await github.rest.pulls.createComment({
-                      owner: repoOwner,
-                      repo: repoName,
-                      pull_number: prNumber,
-                      body: `🎨 Created and added label **"${labelName}"** (Color: Green) to PR #${prNumber}.`
                     });
                   } else {
                     throw error;
@@ -229,13 +187,6 @@ jobs:
                   pull_number: prNumber,
                   reviewers: reviewers
                 });
-
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: prNumber,
-                  body: `🔍 Requested review from ${reviewers.map(r => `@${r}`).join(", ")}`
-                });
               }
             }
 
@@ -255,13 +206,6 @@ jobs:
                   pull_number: prNumber,
                   reviewers: reviewers
                 });
-
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: prNumber,
-                  body: `👋 CC'd ${reviewers.map(r => `@${r}`).join(", ")} for review`
-                });
               }
             }
 
@@ -276,13 +220,6 @@ jobs:
                     repo: repoName,
                     issue_number: prNumber,
                     labels: [lgtmLabel]
-                  });
-
-                  await github.rest.issues.createComment({
-                    owner: repoOwner,
-                    repo: repoName,
-                    issue_number: prNumber,
-                    body: `✨ @${commenter} marked this PR as **LGTM** !`
                   });
                 } catch (error) {
                   if (error.status === 404) {
@@ -301,22 +238,8 @@ jobs:
                       issue_number: prNumber,
                       labels: [lgtmLabel]
                     });
-
-                    await github.rest.issues.createComment({
-                      owner: repoOwner,
-                      repo: repoName,
-                      issue_number: prNumber,
-                      body: `✨ @${commenter} marked this PR as **LGTM** (Looks Good To Me)`
-                    });
                   }
                 }
-              } else {
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: prNumber,
-                  body: `❌ Sorry @${commenter}, only maintainers can use the \`/lgtm\` command.`
-                });
               }
             }
 
@@ -334,13 +257,6 @@ jobs:
                       issue_number: prNumber,
                       name: approvedLabel
                     });
-
-                    await github.rest.issues.createComment({
-                      owner: repoOwner,
-                      repo: repoName,
-                      issue_number: prNumber,
-                      body: `❌ Approval cancelled by @${commenter}`
-                    });
                   } catch (error) {
                     if (error.status !== 404) { // Ignore if label doesn't exist
                       throw error;
@@ -353,13 +269,6 @@ jobs:
                       repo: repoName,
                       issue_number: prNumber,
                       labels: [approvedLabel]
-                    });
-
-                    await github.rest.issues.createComment({
-                      owner: repoOwner,
-                      repo: repoName,
-                      issue_number: prNumber,
-                      body: `✅ PR approved by @${commenter}`
                     });
                   } catch (error) {
                     if (error.status === 404) {
@@ -377,24 +286,10 @@ jobs:
                         issue_number: prNumber,
                         labels: [approvedLabel]
                       });
-
-                      await github.rest.issues.createComment({
-                        owner: repoOwner,
-                        repo: repoName,
-                        issue_number: prNumber,
-                        body: `✅ PR approved by @${commenter}`
-                      });
                     } else {
                       throw error;
                     }
                   }
                 }
-              } else {
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: prNumber,
-                  body: `❌ Sorry @${commenter}, only maintainers can use the \`/approve\` command.`
-                });
               }
             }

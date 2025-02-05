@@ -30,46 +30,15 @@ jobs:
                 issue_number: issueNumber,
                 assignees: [commenter]
               });
-
-              await github.rest.issues.createComment({
-                owner: repoOwner,
-                repo: repoName,
-                issue_number: issueNumber,
-                body: `🛠️ Assigned issue #${issueNumber} to @${commenter}!`
-              });
             }
 
             // /close command with specific reasons
             if (comment.startsWith("/close ")) {
-              const closeReason = comment.replace("/close ", "").trim();
-
-              let state = "closed";
-              let reason = "";
-
-              if (closeReason === "not-planned") {
-                reason = "Not planned";
-              } else if (closeReason === "completed") {
-                reason = "Completed";
-              } else if (closeReason === "inactive") {
-                reason = "Inactive";
-              } else if (closeReason === "duplicate") {
-                reason = "Duplicate";
-              } else {
-                reason = "Closed"; 
-              }
-
               await github.rest.issues.update({
                 owner: repoOwner,
                 repo: repoName,
                 issue_number: issueNumber,
-                state: state
-              });
-
-              await github.rest.issues.createComment({
-                owner: repoOwner,
-                repo: repoName,
-                issue_number: issueNumber,
-                body: `✅ Issue #${issueNumber} has been marked as **${reason}** by @${commenter}.`
+                state: "closed"
               });
             }
 
@@ -81,19 +50,11 @@ jobs:
                 issue_number: issueNumber,
                 state: "open"
               });
-
-              await github.rest.issues.createComment({
-                owner: repoOwner,
-                repo: repoName,
-                issue_number: issueNumber,
-                body: `🔄 Issue #${issueNumber} has been reopened by @${commenter}.`
-              });
             }
 
             // /label command
             if (comment.startsWith("/label ")) {
               const labelName = comment.replace("/label ", "").trim();
-  
               if (labelName) {
                 try {
                   await github.rest.issues.addLabels({
@@ -102,34 +63,19 @@ jobs:
                     issue_number: issueNumber,
                     labels: [labelName]
                   });
-
-                  await github.rest.issues.createComment({
-                    owner: repoOwner,
-                    repo: repoName,
-                    issue_number: issueNumber,
-                    body: `🏷️ Added label **"${labelName}"** to issue #${issueNumber}.`
-                  });
                 } catch (error) {
                   if (error.status === 404) {
                     await github.rest.issues.createLabel({
                       owner: repoOwner,
                       repo: repoName,
                       name: labelName,
-                      color: "0e8a16" 
+                      color: "0e8a16"
                     });
-
                     await github.rest.issues.addLabels({
                       owner: repoOwner,
                       repo: repoName,
                       issue_number: issueNumber,
                       labels: [labelName]
-                    });
-
-                    await github.rest.issues.createComment({
-                      owner: repoOwner,
-                      repo: repoName,
-                      issue_number: issueNumber,
-                      body: `🎨 Created and added label **"${labelName}"** (Color: Green) to issue #${issueNumber}.`
                     });
                   } else {
                     throw error;
@@ -141,7 +87,6 @@ jobs:
             // /help command
             if (comment === "/help") {
               const helpLabel = "help wanted";
-              
               try {
                 await github.rest.issues.addLabels({
                   owner: repoOwner,
@@ -149,16 +94,8 @@ jobs:
                   issue_number: issueNumber,
                   labels: [helpLabel]
                 });
-
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: issueNumber,
-                  body: `🆘 Added **"${helpLabel}"** label to issue #${issueNumber}. This issue needs community help!`
-                });
               } catch (error) {
                 if (error.status === 404) {
-                  // Create the label if it doesn't exist
                   await github.rest.issues.createLabel({
                     owner: repoOwner,
                     repo: repoName,
@@ -166,19 +103,11 @@ jobs:
                     color: "008672",
                     description: "Extra attention is needed"
                   });
-
                   await github.rest.issues.addLabels({
                     owner: repoOwner,
                     repo: repoName,
                     issue_number: issueNumber,
                     labels: [helpLabel]
-                  });
-
-                  await github.rest.issues.createComment({
-                    owner: repoOwner,
-                    repo: repoName,
-                    issue_number: issueNumber,
-                    body: `🆘 Created and added **"${helpLabel}"** label to issue #${issueNumber}. This issue needs community help!`
                   });
                 } else {
                   throw error;
