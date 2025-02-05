@@ -48,12 +48,15 @@ jobs:
             // Process /kind flag in PR description
             if ((action === "opened" || action === "edited") && isPR) {
               const description = context.payload.pull_request?.body?.trim() || "";
-              const kindMatch = description.match(/\/kind\s+(\S+)/i);
+              // Improved regex to handle different formatting
+              const kindMatch = description.match(/\/kind\s*:\s*(\S+)|\/kind\s+(\S+)/i);
               
               if (kindMatch) {
-                const kindLabel = `kind/${kindMatch[1].toLowerCase()}`;
+                const kindValue = (kindMatch[1] || kindMatch[2]).toLowerCase();
+                const kindLabel = `kind/${kindValue}`;
                 
                 try {
+                  // First try to add the label
                   await github.rest.issues.addLabels({
                     owner: repoOwner,
                     repo: repoName,
@@ -62,20 +65,39 @@ jobs:
                   });
                 } catch (error) {
                   if (error.status === 404) {
-                    // Create the kind label if it doesn't exist
-                    await github.rest.issues.createLabel({
-                      owner: repoOwner,
-                      repo: repoName,
-                      name: kindLabel,
-                      color: "696969",  // Dark gray
-                      description: `PR type: ${kindMatch[1]}`
-                    });
+                    try {
+                      // Create the kind label if it doesn't exist
+                      await github.rest.issues.createLabel({
+                        owner: repoOwner,
+                        repo: repoName,
+                        name: kindLabel,
+                        color: "696969",  // Dark gray
+                        description: `PR type: ${kindValue}`
+                      });
 
-                    await github.rest.issues.addLabels({
+                      // Try adding the label again
+                      await github.rest.issues.addLabels({
+                        owner: repoOwner,
+                        repo: repoName,
+                        issue_number: prNumber,
+                        labels: [kindLabel]
+                      });
+                    } catch (createError) {
+                      // Comment on PR if label operations failed
+                      await github.rest.issues.createComment({
+                        owner: repoOwner,
+                        repo: repoName,
+                        issue_number: prNumber,
+                        body: `Failed to add kind label: ${kindLabel}. Please check if the kind type is valid.`
+                      });
+                    }
+                  } else {
+                    // Comment on PR for other errors
+                    await github.rest.issues.createComment({
                       owner: repoOwner,
                       repo: repoName,
                       issue_number: prNumber,
-                      labels: [kindLabel]
+                      body: `Error processing /kind command: ${error.message}`
                     });
                   }
                 }
