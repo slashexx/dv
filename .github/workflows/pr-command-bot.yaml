@@ -180,14 +180,6 @@ jobs:
                 });
               }
 
-              if (comment?.includes("/merge") && action === "created") {
-                await github.rest.pulls.merge({
-                  owner: repoOwner,
-                  repo: repoName,
-                  pull_number: prNumber,
-                });
-              }
-
               if (comment?.includes("/label") && action === "created") {
                 const labelName = comment.split("/label")[1]?.trim();
                 if (labelName) {
