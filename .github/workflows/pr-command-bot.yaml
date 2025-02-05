@@ -142,7 +142,7 @@ jobs:
                   if (commenter === prAuthor) {
                     throw new Error("You cannot LGTM your own pull request ");
                   }
-                  await handleLabel("lgtm", "0e8a16", "Looks Good To Me");
+                  await handleLabel("LGTM", "0e8a16", "Looks Good To Me");
                 } catch (error) {
                   await github.rest.issues.createComment({
                     owner: repoOwner,
