@@ -158,39 +158,28 @@ jobs:
               }
             }
 
-            // /review command for PR
+            // /review command for PR - request reviews from others
             if (comment?.startsWith("/review ") && action === "created") {
-              const reviewType = comment.replace("/review ", "").trim().toLowerCase();
+              const reviewers = comment
+                .replace("/review ", "")
+                .trim()
+                .split(" ")
+                .map(r => r.replace("@", ""))
+                .filter(r => r);  // Remove empty strings
 
-              let reviewState;
-              let reviewBody;
+              if (reviewers.length > 0) {
+                await github.rest.pulls.requestReviewers({
+                  owner: repoOwner,
+                  repo: repoName,
+                  pull_number: prNumber,
+                  reviewers: reviewers
+                });
 
-              switch(reviewType) {
-                case "approve":
-                  reviewState = "APPROVE";
-                  reviewBody = "✅ Approved this PR.";
-                  break;
-                case "request":
-                  reviewState = "REQUEST_CHANGES";
-                  reviewBody = "❌ Requesting changes on this PR.";
-                  break;
-                default:
-                  reviewState = "COMMENT";
-                  reviewBody = "💭 Commented on this PR.";
+                await github.rest.issues.createComment({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: prNumber,
+                  body: `🔍 Requested review from ${reviewers.map(r => `@${r}`).join(", ")}`
+                });
               }
-
-              await github.rest.pulls.createReview({
-                owner: repoOwner,
-                repo: repoName,
-                pull_number: prNumber,
-                event: reviewState,
-                body: `${reviewBody} - @${commenter}`
-              });
-
-              await github.rest.issues.createComment({
-                owner: repoOwner,
-                repo: repoName,
-                issue_number: prNumber,
-                body: `📝 Review submitted by @${commenter} - ${reviewBody}`
-              });
             }
