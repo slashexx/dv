@@ -45,6 +45,37 @@ jobs:
               }
             }
 
+            // Helper function to handle labels
+            async function handleLabel(labelName, color, description) {
+              try {
+                await github.rest.issues.addLabels({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: prNumber,
+                  labels: [labelName]
+                });
+              } catch (error) {
+                if (error.status === 404) {
+                  await github.rest.issues.createLabel({
+                    owner: repoOwner,
+                    repo: repoName,
+                    name: labelName,
+                    color: color || "0e8a16",
+                    description: description || ""
+                  });
+                  
+                  await github.rest.issues.addLabels({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: prNumber,
+                    labels: [labelName]
+                  });
+                } else {
+                  throw error;
+                }
+              }
+            }
+
             // Process /kind flag in PR description
             if ((action === "opened" || action === "edited") && isPR) {
               const description = context.payload.pull_request?.body?.trim() || "";
@@ -213,55 +244,66 @@ jobs:
             }
 
             // /cc command for requesting reviews
-            if (comment?.startsWith("/cc ") && action === "created") {
+            if (comment?.startsWith("/cc") && action === "created") {
               const reviewers = comment
-                .replace("/cc ", "")
+                .substring(3)  // Remove '/cc'
                 .trim()
-                .split(" ")
-                .map(r => r.replace("@", ""))
-                .filter(r => r);
+                .split(/[\s,]+/)  // Split by whitespace or commas
+                .map(r => r.replace(/^@/, "").trim())  // Remove @ and trim
+                .filter(r => r);  // Remove empty strings
 
               if (reviewers.length > 0) {
-                await github.rest.pulls.requestReviewers({
-                  owner: repoOwner,
-                  repo: repoName,
-                  pull_number: prNumber,
-                  reviewers: reviewers
-                });
+                try {
+                  await github.rest.pulls.requestReviewers({
+                    owner: repoOwner,
+                    repo: repoName,
+                    pull_number: prNumber,
+                    reviewers: reviewers
+                  });
+                } catch (error) {
+                  await github.rest.issues.createComment({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: prNumber,
+                    body: `Failed to request review from: ${reviewers.join(", ")}. Error: ${error.message}`
+                  });
+                }
               }
             }
 
             // /lgtm command for maintainers
             if (comment === "/lgtm" && action === "created") {
-              if (await isMaintainer(commenter)) {
-                const lgtmLabel = "lgtm";
-                
-                try {
-                  await github.rest.issues.addLabels({
+              try {
+                if (await isMaintainer(commenter)) {
+                  await handleLabel(
+                    "lgtm",
+                    "0e8a16",
+                    "Looks Good To Me - Approved by maintainer"
+                  );
+                  
+                  // Add approval review
+                  await github.rest.pulls.createReview({
+                    owner: repoOwner,
+                    repo: repoName,
+                    pull_number: prNumber,
+                    event: 'APPROVE',
+                    body: 'LGTM! 👍'
+                  });
+                } else {
+                  await github.rest.issues.createComment({
                     owner: repoOwner,
                     repo: repoName,
                     issue_number: prNumber,
-                    labels: [lgtmLabel]
+                    body: "Only maintainers can use the /lgtm command."
                   });
-                } catch (error) {
-                  if (error.status === 404) {
-                    // Create label if it doesn't exist
-                    await github.rest.issues.createLabel({
-                      owner: repoOwner,
-                      repo: repoName,
-                      name: lgtmLabel,
-                      color: "0e8a16",
-                      description: "Looks Good To Me - Approved by maintainer"
-                    });
-
-                    await github.rest.issues.addLabels({
-                      owner: repoOwner,
-                      repo: repoName,
-                      issue_number: prNumber,
-                      labels: [lgtmLabel]
-                    });
-                  }
                 }
+              } catch (error) {
+                await github.rest.issues.createComment({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: prNumber,
+                  body: `Error processing /lgtm command: ${error.message}`
+                });
               }
             }
 
