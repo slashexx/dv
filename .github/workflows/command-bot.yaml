@@ -39,7 +39,6 @@ jobs:
               });
             }
 
-            // /close command with different statuses
             if (comment.startsWith("/close ")) {
               const closeReason = comment.replace("/close ", "").trim();
 
@@ -55,7 +54,7 @@ jobs:
               } else if (closeReason === "duplicate") {
                 reason = "Duplicate";
               } else {
-                reason = "Closed"; // Default case
+                reason = "Closed"; 
               }
 
               await github.rest.issues.update({
@@ -115,7 +114,7 @@ jobs:
                       owner: repoOwner,
                       repo: repoName,
                       name: labelName,
-                      color: "0e8a16" // Green color
+                      color: "0e8a16" 
                     });
 
                     await github.rest.issues.addLabels({
