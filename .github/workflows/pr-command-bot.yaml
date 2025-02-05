@@ -68,7 +68,6 @@ jobs:
                   ['admin', 'write'].includes(collab.permissions?.pull)
                 );
               } catch (error) {
-                console.error('Error checking maintainer status:', error);
                 return false;
               }
             }
@@ -129,7 +128,12 @@ jobs:
                   const reviewers = comment.substring(3).trim().split(/[\s,]+/);
                   await requestReviews(reviewers);
                 } catch (error) {
-                  console.error("Error requesting reviews:", error);
+                  await github.rest.issues.createComment({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: prNumber,
+                    body: `❌ ${error.message}`
+                  });
                 }
               }
 
@@ -140,7 +144,12 @@ jobs:
                   }
                   await handleLabel("lgtm", "0e8a16", "Looks Good To Me");
                 } catch (error) {
-                  console.error("Error in /lgtm command:", error);
+                  await github.rest.issues.createComment({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: prNumber,
+                    body: `❌ ${error.message}`
+                  });
                 }
               }
 
@@ -193,9 +202,23 @@ jobs:
                 if (kindMatch) {
                   const kindValue = (kindMatch[1] || kindMatch[2]).toLowerCase();
                   const kindLabel = `kind/${kindValue}`;
-                  await handleLabel(kindLabel, "696969", `PR type: ${kindValue}`);
+                  try {
+                    await handleLabel(kindLabel, "696969", `PR type: ${kindValue}`);
+                  } catch (error) {
+                    await github.rest.issues.createComment({
+                      owner: repoOwner,
+                      repo: repoName,
+                      issue_number: prNumber,
+                      body: `❌ Failed to add kind label: ${kindLabel}. ${error.message}`
+                    });
+                  }
                 }
               }
             } catch (error) {
-              console.error("Error processing command:", error);
+              await github.rest.issues.createComment({
+                owner: repoOwner,
+                repo: repoName,
+                issue_number: prNumber,
+                body: `❌ ${error.message}`
+              });
             }
