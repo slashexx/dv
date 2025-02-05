@@ -89,27 +89,6 @@ jobs:
               }
             }
 
-            // Helper function to check if user is a requested reviewer
-            async function isRequestedReviewer(username) {
-              try {
-                console.log(`Checking if ${username} is a requested reviewer`);
-                const { data: pr } = await github.rest.pulls.get({
-                  owner: repoOwner,
-                  repo: repoName,
-                  pull_number: prNumber
-                });
-                
-                const isRequested = pr.requested_reviewers.some(
-                  reviewer => reviewer.login === username
-                );
-                console.log(`${username} requested reviewer status:`, isRequested);
-                return isRequested;
-              } catch (error) {
-                console.error('Error checking reviewer status:', error);
-                return false;
-              }
-            }
-
             // Helper function to handle labels
             async function handleLabel(labelName, color, description) {
               try {
@@ -303,55 +282,6 @@ jobs:
                       throw error;
                     }
                   }
-                }
-              }
-
-              // /approve command for reviewers
-              if (comment?.includes("/approve") && action === "created") {
-                console.log("Processing /approve command from:", commenter);
-                
-                const canApprove = await isRequestedReviewer(commenter);
-                console.log("Can approve check result:", canApprove);
-                
-                if (canApprove) {
-                  const isCancel = comment.includes("cancel");
-                  const approvedLabel = "approved";
-                  
-                  if (isCancel) {
-                    // ...existing cancel approval code...
-                  } else {
-                    console.log("Processing new approval");
-                    try {
-                      // Submit approval review
-                      await github.rest.pulls.createReview({
-                        owner: repoOwner,
-                        repo: repoName,
-                        pull_number: prNumber,
-                        event: 'APPROVE',
-                        body: 'Approved via command'
-                      });
-                      
-                      // Add label
-                      await handleLabel(approvedLabel, "28a745", "Pull request has been approved by a reviewer");
-                      
-                      await github.rest.issues.createComment({
-                        owner: repoOwner,
-                        repo: repoName,
-                        issue_number: prNumber,
-                        body: `✅ @${commenter} has approved this pull request`
-                      });
-                    } catch (error) {
-                      console.error("Error approving PR:", error);
-                      throw error;
-                    }
-                  }
-                } else {
-                  await github.rest.issues.createComment({
-                    owner: repoOwner,
-                    repo: repoName,
-                    issue_number: prNumber,
-                    body: `❌ @${commenter} must be requested as a reviewer before they can approve this pull request`
-                  });
                 }
               }
 
