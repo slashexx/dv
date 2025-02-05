@@ -147,7 +147,7 @@ jobs:
 
             try {
               // /cc command for requesting reviews
-              if (comment?.startsWith("/cc") && action === "created") {
+              if (comment?.includes("/cc") && action === "created") {
                 try {
                   const reviewers = comment
                     .substring(3)  // Remove '/cc'
