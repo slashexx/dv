@@ -19,9 +19,9 @@ jobs:
             const comment = context.payload.comment.body.trim().toLowerCase();
             const commenter = context.payload.comment.user.login;
             const issueNumber = context.issue.number;
-            const repoOwner = context.repo.owner;
-            const repoName = context.repo.repo;
+            const { owner: repoOwner, repo: repoName } = context.repo;
 
+            // /assign command is here
             if (comment === "/assign") {
               await github.rest.issues.addAssignees({
                 owner: repoOwner,
@@ -38,6 +38,7 @@ jobs:
               });
             }
 
+            // /close
             if (comment === "/close") {
               await github.rest.issues.update({
                 owner: repoOwner,
@@ -54,22 +55,50 @@ jobs:
               });
             }
 
+            // /label wali command
             if (comment.startsWith("/label ")) {
               const labelName = comment.replace("/label ", "").trim();
 
               if (labelName) {
-                await github.rest.issues.addLabels({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: issueNumber,
-                  labels: [labelName]
-                });
+                try {
+                  await github.rest.issues.addLabels({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: issueNumber,
+                    labels: [labelName]
+                  });
 
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: issueNumber,
-                  body: `🏷️ Added label **"${labelName}"** to issue #${issueNumber}.`
-                });
+                  await github.rest.issues.createComment({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: issueNumber,
+                    body: `🏷️ Added label **"${labelName}"** to issue #${issueNumber}.`
+                  });
+                } catch (error) {
+                  if (error.status === 404) {
+                    await github.rest.issues.createLabel({
+                      owner: repoOwner,
+                      repo: repoName,
+                      name: labelName,
+                      color: "0e8a16"  # Green color
+                    });
+
+                    await github.rest.issues.addLabels({
+                      owner: repoOwner,
+                      repo: repoName,
+                      issue_number: issueNumber,
+                      labels: [labelName]
+                    });
+
+                    await github.rest.issues.createComment({
+                      owner: repoOwner,
+                      repo: repoName,
+                      issue_number: issueNumber,
+                      body: `🎨 Created and added label **"${labelName}"** (Color: Green) to issue #${issueNumber}.`
+                    });
+                  } else {
+                    throw error;
+                  }
+                }
               }
             }
