@@ -191,7 +191,7 @@ jobs:
                     owner: repoOwner,
                     repo: repoName,
                     issue_number: prNumber,
-                    body: `❌ Error: ${error.message}`
+                    body: `❌ ${error.message}`
                   });
                 }
               }
