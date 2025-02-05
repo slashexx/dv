@@ -1,6 +1,8 @@
 name: PR Command Bot
 
 on:
+  issue_comment:
+    types: [created]
   pull_request_review_comment:
     types: [created]
   pull_request:
@@ -18,20 +20,56 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const comment = context.payload.comment?.body?.trim().toLowerCase();
-            const commenter = context.payload.comment?.user?.login;
-            const prNumber = context.payload.issue?.number || context.payload.pull_request?.number;
+            // Determine event type and get comment details
+            const eventName = context.eventName;
+            let comment, commenter, action, prNumber;
+
+            console.log("Event type:", eventName);
+
+            // Handle different event types
+            if (eventName === 'issue_comment') {
+              // Only process if this is a PR comment
+              if (!context.payload.issue.pull_request) {
+                console.log("Skipping - not a PR comment");
+                return;
+              }
+              comment = context.payload.comment?.body?.trim().toLowerCase();
+              commenter = context.payload.comment?.user?.login;
+              prNumber = context.payload.issue.number;
+              action = context.payload.action;
+            } else if (eventName === 'pull_request_review_comment') {
+              comment = context.payload.comment?.body?.trim().toLowerCase();
+              commenter = context.payload.comment?.user?.login;
+              prNumber = context.payload.pull_request.number;
+              action = context.payload.action;
+            } else if (eventName === 'pull_request') {
+              prNumber = context.payload.pull_request.number;
+              action = context.payload.action;
+            }
+
             const repoOwner = context.repo.owner;
             const repoName = context.repo.repo;
-            const action = context.payload.action;
 
-            console.log("Received comment:", comment);
-            console.log("Commenter:", commenter);
-            console.log("Action:", action);
-            console.log("PR Number:", prNumber);
+            console.log("Processing:", {
+              comment,
+              commenter,
+              action,
+              prNumber,
+              eventName
+            });
 
-
-            const isPR = context.payload.pull_request !== undefined;
+            // Get PR details if needed
+            let prAuthor;
+            if (eventName === 'issue_comment') {
+              const { data: pr } = await github.rest.pulls.get({
+                owner: repoOwner,
+                repo: repoName,
+                pull_number: prNumber
+              });
+              prAuthor = pr.user.login;
+            } else if (eventName === 'pull_request' || eventName === 'pull_request_review_comment') {
+              prAuthor = context.payload.pull_request.user.login;
+            }
 
             // Helper function to check if user is a maintainer
             async function isMaintainer(username) {
@@ -113,258 +151,241 @@ jobs:
               return afterCmd || null;
             }
 
-            // Process /kind flag in PR description
-            if ((action === "opened" || action === "edited") && isPR) {
-              const description = context.payload.pull_request?.body?.trim() || "";
-              // Improved regex to handle different formatting
-              const kindMatch = description.match(/\/kind\s*:\s*(\S+)|\/kind\s+(\S+)/i);
-              
-              if (kindMatch) {
-                const kindValue = (kindMatch[1] || kindMatch[2]).toLowerCase();
-                const kindLabel = `kind/${kindValue}`;
-                
-                try {
-                  await github.rest.issues.addLabels({
-                    owner: repoOwner,
-                    repo: repoName,
-                    issue_number: prNumber,
-                    labels: [kindLabel]
-                  });
-                } catch (error) {
-                  if (error.status === 404) {
-                    try {
-                      await github.rest.issues.createLabel({
-                        owner: repoOwner,
-                        repo: repoName,
-                        name: kindLabel,
-                        color: "696969",  // Dark gray
-                        description: `PR type: ${kindValue}`
-                      });
+            try {
+              // Process commands only for comment events
+              if (action === 'created' && comment) {
+                if (comment?.includes("/cc")) {
+                  // ...existing /cc command code...
+                }
 
-                      // Try adding the label again
-                      await github.rest.issues.addLabels({
-                        owner: repoOwner,
-                        repo: repoName,
-                        issue_number: prNumber,
-                        labels: [kindLabel]
-                      });
-                    } catch (createError) {
-                      // Comment on PR if label operations failed
-                      await github.rest.issues.createComment({
-                        owner: repoOwner,
-                        repo: repoName,
-                        issue_number: prNumber,
-                        body: `Failed to add kind label: ${kindLabel}. Please check if the kind type is valid.`
-                      });
+                if (comment?.includes("/lgtm")) {
+                  try {
+                    if (commenter === prAuthor) {
+                      throw new Error("You cannot LGTM your own pull request");
                     }
-                  } else {
-                    // Comment on PR for other errors
+
+                    await handleLabel("lgtm", "0e8a16", "Looks Good To Me");
+                    
                     await github.rest.issues.createComment({
                       owner: repoOwner,
                       repo: repoName,
                       issue_number: prNumber,
-                      body: `Error processing /kind command: ${error.message}`
+                      body: `✅ @${commenter} has marked this pull request as LGTM`
+                    });
+                  } catch (error) {
+                    console.error("Error in /lgtm command:", error);
+                    await github.rest.issues.createComment({
+                      owner: repoOwner,
+                      repo: repoName,
+                      issue_number: prNumber,
+                      body: `❌ Error: ${error.message}`
                     });
                   }
                 }
-              }
-            }
 
-            // /assign command for PR (only for PR events)
-            if (comment?.includes("/assign") && isPR && action === "created") {
-              await github.rest.pulls.requestReviewers({
-                owner: repoOwner,
-                repo: repoName,
-                pull_number: prNumber,
-                reviewers: [commenter]
-              });
-            }
-
-            // /close command for PR
-            if (comment?.includes("/close") && action === "created") {
-              const closeReason = parseCommand(comment, "/close");
-
-              let reason = "";
-
-              if (closeReason === "not-planned") {
-                reason = "Not planned";
-              } else if (closeReason === "completed") {
-                reason = "Completed";
-              } else if (closeReason === "inactive") {
-                reason = "Inactive";
-              } else if (closeReason === "duplicate") {
-                reason = "Duplicate";
-              } else {
-                reason = "Closed"; // Default case
-              }
-
-              await github.rest.pulls.update({
-                owner: repoOwner,
-                repo: repoName,
-                pull_number: prNumber,
-                state: "closed"
-              });
-            }
-
-            // /reopen command for PR
-            if (comment?.includes("/reopen") && action === "created") {
-              await github.rest.pulls.update({
-                owner: repoOwner,
-                repo: repoName,
-                pull_number: prNumber,
-                state: "open"
-              });
-            }
-
-            // /merge command for PR
-            if (comment?.includes("/merge") && action === "created") {
-              await github.rest.pulls.merge({
-                owner: repoOwner,
-                repo: repoName,
-                pull_number: prNumber,
-              });
-            }
-
-            // /label command for PR
-            if (comment?.includes("/label") && action === "created") {
-              const labelName = parseCommand(comment, "/label");
-  
-              if (labelName) {
-                try {
-                  await github.rest.issues.addLabels({
+                // /assign command for PR (only for PR events)
+                if (comment?.includes("/assign") && isPR && action === "created") {
+                  await github.rest.pulls.requestReviewers({
                     owner: repoOwner,
                     repo: repoName,
-                    issue_number: prNumber,  
-                    labels: [labelName]
+                    pull_number: prNumber,
+                    reviewers: [commenter]
                   });
-                } catch (error) {
-                  if (error.status === 404) {
-                    await github.rest.issues.createLabel({
-                      owner: repoOwner,
-                      repo: repoName,
-                      name: labelName,
-                      color: "0e8a16" 
-                    });
+                }
 
-                    await github.rest.issues.addLabels({
-                      owner: repoOwner,
-                      repo: repoName,
-                      issue_number: prNumber,
-                      labels: [labelName]
-                    });
+                // /close command for PR
+                if (comment?.includes("/close") && action === "created") {
+                  const closeReason = parseCommand(comment, "/close");
+
+                  let reason = "";
+
+                  if (closeReason === "not-planned") {
+                    reason = "Not planned";
+                  } else if (closeReason === "completed") {
+                    reason = "Completed";
+                  } else if (closeReason === "inactive") {
+                    reason = "Inactive";
+                  } else if (closeReason === "duplicate") {
+                    reason = "Duplicate";
                   } else {
-                    throw error;
+                    reason = "Closed"; // Default case
                   }
-                }
-              }
-            }
 
-            // /cc command for requesting reviews
-            if (comment?.includes("/cc") && action === "created") {
-              try {
-                const reviewer = parseCommand(comment, "/cc");
-                if (!reviewer) {
-                  throw new Error("No reviewer specified");
-                }
-                console.log("CC command received for reviewer:", reviewer);
-
-                const added = await requestReviews(reviewer);
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: prNumber,
-                  body: `✅ Requested review from @${added}`
-                });
-              } catch (error) {
-                console.error("Error in /cc command:", error);
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: prNumber,
-                  body: `❌ Error: ${error.message}`
-                });
-              }
-            }
-
-            // /lgtm command - simplified without maintainer check
-            if (comment?.includes("/lgtm") && action === "created") {
-              try {
-                if (!isPR) {
-                  throw new Error("/lgtm command can only be used on pull requests");
+                  await github.rest.pulls.update({
+                    owner: repoOwner,
+                    repo: repoName,
+                    pull_number: prNumber,
+                    state: "closed"
+                  });
                 }
 
-                // Check if commenter is the PR author
-                const prAuthor = context.payload.pull_request.user.login;
-                if (commenter === prAuthor) {
-                  throw new Error("You cannot LGTM your own pull request");
+                // /reopen command for PR
+                if (comment?.includes("/reopen") && action === "created") {
+                  await github.rest.pulls.update({
+                    owner: repoOwner,
+                    repo: repoName,
+                    pull_number: prNumber,
+                    state: "open"
+                  });
                 }
 
-                await handleLabel("lgtm", "0e8a16", "Looks Good To Me");
-                
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: prNumber,
-                  body: `✅ @${commenter} has marked this pull request as LGTM`
-                });
-              } catch (error) {
-                console.error("Error in /lgtm command:", error);
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: prNumber,
-                  body: `❌ Error: ${error.message}`
-                });
-              }
-            }
+                // /merge command for PR
+                if (comment?.includes("/merge") && action === "created") {
+                  await github.rest.pulls.merge({
+                    owner: repoOwner,
+                    repo: repoName,
+                    pull_number: prNumber,
+                  });
+                }
 
-            // /approve command for maintainers
-            if (comment?.includes("/approve") && action === "created") {
-              if (await isMaintainer(commenter)) {
-                const isCancel = comment.includes("cancel");
-                const approvedLabel = "approved";
-                
-                if (isCancel) {
-                  try {
-                    await github.rest.issues.removeLabel({
-                      owner: repoOwner,
-                      repo: repoName,
-                      issue_number: prNumber,
-                      name: approvedLabel
-                    });
-                  } catch (error) {
-                    if (error.status !== 404) { // Ignore if label doesn't exist
-                      throw error;
-                    }
-                  }
-                } else {
-                  try {
-                    await github.rest.issues.addLabels({
-                      owner: repoOwner,
-                      repo: repoName,
-                      issue_number: prNumber,
-                      labels: [approvedLabel]
-                    });
-                  } catch (error) {
-                    if (error.status === 404) {
-                      await github.rest.issues.createLabel({
-                        owner: repoOwner,
-                        repo: repoName,
-                        name: approvedLabel,
-                        color: "28a745", // GitHub green
-                        description: "Pull request has been approved by a maintainer"
-                      });
-
+                // /label command for PR
+                if (comment?.includes("/label") && action === "created") {
+                  const labelName = parseCommand(comment, "/label");
+  
+                  if (labelName) {
+                    try {
                       await github.rest.issues.addLabels({
                         owner: repoOwner,
                         repo: repoName,
-                        issue_number: prNumber,
-                        labels: [approvedLabel]
+                        issue_number: prNumber,  
+                        labels: [labelName]
                       });
+                    } catch (error) {
+                      if (error.status === 404) {
+                        await github.rest.issues.createLabel({
+                          owner: repoOwner,
+                          repo: repoName,
+                          name: labelName,
+                          color: "0e8a16" 
+                        });
+
+                        await github.rest.issues.addLabels({
+                          owner: repoOwner,
+                          repo: repoName,
+                          issue_number: prNumber,
+                          labels: [labelName]
+                        });
+                      } else {
+                        throw error;
+                      }
+                    }
+                  }
+                }
+
+                // /approve command for maintainers
+                if (comment?.includes("/approve") && action === "created") {
+                  if (await isMaintainer(commenter)) {
+                    const isCancel = comment.includes("cancel");
+                    const approvedLabel = "approved";
+                    
+                    if (isCancel) {
+                      try {
+                        await github.rest.issues.removeLabel({
+                          owner: repoOwner,
+                          repo: repoName,
+                          issue_number: prNumber,
+                          name: approvedLabel
+                        });
+                      } catch (error) {
+                        if (error.status !== 404) { // Ignore if label doesn't exist
+                          throw error;
+                        }
+                      }
                     } else {
-                      throw error;
+                      try {
+                        await github.rest.issues.addLabels({
+                          owner: repoOwner,
+                          repo: repoName,
+                          issue_number: prNumber,
+                          labels: [approvedLabel]
+                        });
+                      } catch (error) {
+                        if (error.status === 404) {
+                          await github.rest.issues.createLabel({
+                            owner: repoOwner,
+                            repo: repoName,
+                            name: approvedLabel,
+                            color: "28a745", // GitHub green
+                            description: "Pull request has been approved by a maintainer"
+                          });
+
+                          await github.rest.issues.addLabels({
+                            owner: repoOwner,
+                            repo: repoName,
+                            issue_number: prNumber,
+                            labels: [approvedLabel]
+                          });
+                        } else {
+                          throw error;
+                        }
+                      }
                     }
                   }
                 }
               }
+
+              // Process PR description commands
+              if ((action === "opened" || action === "edited") && eventName === 'pull_request') {
+                const description = context.payload.pull_request?.body?.trim() || "";
+                // Improved regex to handle different formatting
+                const kindMatch = description.match(/\/kind\s*:\s*(\S+)|\/kind\s+(\S+)/i);
+                
+                if (kindMatch) {
+                  const kindValue = (kindMatch[1] || kindMatch[2]).toLowerCase();
+                  const kindLabel = `kind/${kindValue}`;
+                  
+                  try {
+                    await github.rest.issues.addLabels({
+                      owner: repoOwner,
+                      repo: repoName,
+                      issue_number: prNumber,
+                      labels: [kindLabel]
+                    });
+                  } catch (error) {
+                    if (error.status === 404) {
+                      try {
+                        await github.rest.issues.createLabel({
+                          owner: repoOwner,
+                          repo: repoName,
+                          name: kindLabel,
+                          color: "696969",  // Dark gray
+                          description: `PR type: ${kindValue}`
+                        });
+
+                        // Try adding the label again
+                        await github.rest.issues.addLabels({
+                          owner: repoOwner,
+                          repo: repoName,
+                          issue_number: prNumber,
+                          labels: [kindLabel]
+                        });
+                      } catch (createError) {
+                        // Comment on PR if label operations failed
+                        await github.rest.issues.createComment({
+                          owner: repoOwner,
+                          repo: repoName,
+                          issue_number: prNumber,
+                          body: `Failed to add kind label: ${kindLabel}. Please check if the kind type is valid.`
+                        });
+                      }
+                    } else {
+                      // Comment on PR for other errors
+                      await github.rest.issues.createComment({
+                        owner: repoOwner,
+                        repo: repoName,
+                        issue_number: prNumber,
+                        body: `Error processing /kind command: ${error.message}`
+                      });
+                    }
+                  }
+                }
+              }
+            } catch (error) {
+              console.error("Error processing command:", error);
+              await github.rest.issues.createComment({
+                owner: repoOwner,
+                repo: repoName,
+                issue_number: prNumber,
+                body: `❌ Error: ${error.message}`
+              });
             }
