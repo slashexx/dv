@@ -27,6 +27,24 @@ jobs:
 
             const isPR = context.payload.pull_request !== undefined;
 
+            // Helper function to check if user is a maintainer
+            async function isMaintainer(username) {
+              try {
+                const { data: collaborators } = await github.rest.repos.listCollaborators({
+                  owner: repoOwner,
+                  repo: repoName,
+                  affiliation: 'direct'
+                });
+                return collaborators.some(collab => 
+                  collab.login === username && 
+                  ['admin', 'write'].includes(collab.permissions?.pull)
+                );
+              } catch (error) {
+                console.error('Error checking maintainer status:', error);
+                return false;
+              }
+            }
+
             // /assign command for PR (only for PR events)
             if (comment === "/assign" && isPR && action === "created") {
               await github.rest.pulls.requestReviewers({
@@ -40,7 +58,7 @@ jobs:
                 owner: repoOwner,
                 repo: repoName,
                 issue_number: prNumber,
-                body: `🛠️ Assigned PR #${prNumber} to @${commenter}!`
+                body: `🛠️ Added @${commenter} as a reviewer to PR #${prNumber}`
               });
             }
 
@@ -180,6 +198,61 @@ jobs:
                   repo: repoName,
                   issue_number: prNumber,
                   body: `🔍 Requested review from ${reviewers.map(r => `@${r}`).join(", ")}`
+                });
+              }
+            }
+
+            // /lgtm command for maintainers
+            if (comment === "/lgtm" && action === "created") {
+              if (await isMaintainer(commenter)) {
+                const lgtmLabel = "lgtm";
+                
+                try {
+                  await github.rest.issues.addLabels({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: prNumber,
+                    labels: [lgtmLabel]
+                  });
+
+                  await github.rest.issues.createComment({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: prNumber,
+                    body: `✨ @${commenter} marked this PR as **LGTM** !`
+                  });
+                } catch (error) {
+                  if (error.status === 404) {
+                    // Create label if it doesn't exist
+                    await github.rest.issues.createLabel({
+                      owner: repoOwner,
+                      repo: repoName,
+                      name: lgtmLabel,
+                      color: "0e8a16",
+                      description: "Looks Good To Me - Approved by maintainer"
+                    });
+
+                    await github.rest.issues.addLabels({
+                      owner: repoOwner,
+                      repo: repoName,
+                      issue_number: prNumber,
+                      labels: [lgtmLabel]
+                    });
+
+                    await github.rest.issues.createComment({
+                      owner: repoOwner,
+                      repo: repoName,
+                      issue_number: prNumber,
+                      body: `✨ @${commenter} marked this PR as **LGTM** (Looks Good To Me)`
+                    });
+                  }
+                }
+              } else {
+                await github.rest.issues.createComment({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: prNumber,
+                  body: `❌ Sorry @${commenter}, only maintainers can use the \`/lgtm\` command.`
                 });
               }
             }
