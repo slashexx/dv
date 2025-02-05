@@ -137,3 +137,51 @@ jobs:
                 }
               }
             }
+
+            // /help command
+            if (comment === "/help") {
+              const helpLabel = "help wanted";
+              
+              try {
+                await github.rest.issues.addLabels({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: issueNumber,
+                  labels: [helpLabel]
+                });
+
+                await github.rest.issues.createComment({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: issueNumber,
+                  body: `🆘 Added **"${helpLabel}"** label to issue #${issueNumber}. This issue needs community help!`
+                });
+              } catch (error) {
+                if (error.status === 404) {
+                  // Create the label if it doesn't exist
+                  await github.rest.issues.createLabel({
+                    owner: repoOwner,
+                    repo: repoName,
+                    name: helpLabel,
+                    color: "008672",
+                    description: "Extra attention is needed"
+                  });
+
+                  await github.rest.issues.addLabels({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: issueNumber,
+                    labels: [helpLabel]
+                  });
+
+                  await github.rest.issues.createComment({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: issueNumber,
+                    body: `🆘 Created and added **"${helpLabel}"** label to issue #${issueNumber}. This issue needs community help!`
+                  });
+                } else {
+                  throw error;
+                }
+              }
+            }
