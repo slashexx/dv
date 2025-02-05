@@ -174,7 +174,7 @@ jobs:
                   await github.rest.issues.addLabels({
                     owner: repoOwner,
                     repo: repoName,
-                    issue_number: prNumber,  // Should use prNumber here
+                    issue_number: prNumber,  
                     labels: [labelName]
                   });
 
