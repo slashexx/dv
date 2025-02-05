@@ -18,13 +18,23 @@ jobs:
             const comment = context.payload.comment.body.trim();
             const commenter = context.payload.comment.user.login;
             const issueNumber = context.issue.number;
+            const repoOwner = context.repo.owner;
+            const repoName = context.repo.repo;
 
             if (comment === "/assign") {
               await github.rest.issues.addAssignees({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
+                owner: repoOwner,
+                repo: repoName,
                 issue_number: issueNumber,
                 assignees: [commenter]
               });
-              console.log(`Assigned issue #${issueNumber} to @${commenter}`);
+
+              await github.rest.issues.createComment({
+                owner: repoOwner,
+                repo: repoName,
+                issue_number: issueNumber,
+                body: `🛠️ Assigned issue #${issueNumber} to @${commenter}!`
+              });
+
+              console.log(`Assigned issue #${issueNumber} to @${commenter} and commented.`);
             }
