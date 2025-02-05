@@ -121,61 +121,55 @@ jobs:
             }
 
             // Simpler helper function to request reviews
-            async function requestReviews(username) {
-              if (!isPR) {
-                throw new Error("This command can only be used on pull requests");
+            async function requestReviews(reviewers) {
+              const validReviewers = reviewers
+                .map(r => r.replace(/^@/, '').trim())
+                .filter(r => r);
+
+              if (validReviewers.length === 0) {
+                throw new Error('No valid reviewers specified');
               }
 
-              const reviewer = username.replace(/^@/, '').trim();
-              if (!reviewer) {
-                throw new Error('No reviewer specified');
-              }
-
-              console.log("Requesting review from:", reviewer);
+              console.log("Requesting reviews from:", validReviewers);
 
               await github.rest.pulls.requestReviewers({
                 owner: repoOwner,
                 repo: repoName,
                 pull_number: prNumber,
-                reviewers: [reviewer]
+                reviewers: validReviewers
               });
 
-              return reviewer;
+              return validReviewers;
             }
 
-            // Helper function to extract command and args from comment
-            function parseCommand(comment, cmd) {
-              if (!comment?.includes(cmd)) return null;
-              const cmdIndex = comment.indexOf(cmd);
-              const afterCmd = comment.substring(cmdIndex + cmd.length).trim();
-              return afterCmd || null;
-            }
+            // Add isPR check
+            const isPR = !!context.payload.pull_request || !!context.payload.issue?.pull_request;
 
             try {
-               // /cc command for requesting reviews
-            if (comment?.startsWith("/cc") && action === "created") {
-              try {
-                const reviewers = comment
-                  .substring(3)  // Remove '/cc'
-                  .trim()
-                  .split(/[\s,]+/);  // Split by whitespace or commas
+              // /cc command for requesting reviews
+              if (comment?.startsWith("/cc") && action === "created") {
+                try {
+                  const reviewers = comment
+                    .substring(3)  // Remove '/cc'
+                    .trim()
+                    .split(/[\s,]+/);  // Split by whitespace or commas
 
-                const added = await requestReviews(reviewers, "/cc");
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: prNumber,
-                  body: ✅ Requested review from: ${added.map(r => '@' + r).join(', ')}
-                });
-              } catch (error) {
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: prNumber,
-                  body: ❌ Error: ${error.message}
-                });
+                  const added = await requestReviews(reviewers);
+                  await github.rest.issues.createComment({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: prNumber,
+                    body: `✅ Requested review from: ${added.map(r => '@' + r).join(', ')}`
+                  });
+                } catch (error) {
+                  await github.rest.issues.createComment({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: prNumber,
+                    body: `❌ Error: ${error.message}`
+                  });
+                }
               }
-            }
 
                 if (comment?.includes("/lgtm")) {
                   try {
