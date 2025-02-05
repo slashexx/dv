@@ -32,13 +32,14 @@ jobs:
               });
             }
 
-            // /close command with specific reasons
-            if (comment.startsWith("/close ")) {
+            // /close command
+            if (comment === "/close") {
               await github.rest.issues.update({
                 owner: repoOwner,
                 repo: repoName,
                 issue_number: issueNumber,
-                state: "closed"
+                state: "closed",
+                state_reason: "completed"
               });
             }
 
@@ -48,7 +49,8 @@ jobs:
                 owner: repoOwner,
                 repo: repoName,
                 issue_number: issueNumber,
-                state: "open"
+                state: "open",
+                state_reason: "reopened"
               });
             }
 
@@ -108,6 +110,37 @@ jobs:
                     repo: repoName,
                     issue_number: issueNumber,
                     labels: [helpLabel]
+                  });
+                } else {
+                  throw error;
+                }
+              }
+            }
+
+            // /needs-triage command
+            if (comment === "/needs-triage") {
+              const triageLabel = "needs-triage";
+              try {
+                await github.rest.issues.addLabels({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: issueNumber,
+                  labels: [triageLabel]
+                });
+              } catch (error) {
+                if (error.status === 404) {
+                  await github.rest.issues.createLabel({
+                    owner: repoOwner,
+                    repo: repoName,
+                    name: triageLabel,
+                    color: "d73a4a",
+                    description: "This issue needs triage"
+                  });
+                  await github.rest.issues.addLabels({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: issueNumber,
+                    labels: [triageLabel]
                   });
                 } else {
                   throw error;
