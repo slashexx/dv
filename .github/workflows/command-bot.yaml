@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Process Commands
-        uses: actions/github-script@v7
+        uses: actions/github-script@v6
         with:
           script: |
             const comment = context.payload.comment.body.trim().toLowerCase();
@@ -21,16 +21,18 @@ jobs:
             const issueNumber = context.issue.number;
             const { owner: repoOwner, repo: repoName } = context.repo;
 
-            // /assign command is here
+            const octokit = github; // Use the octokit instance
+
+            // Handle /assign command
             if (comment === "/assign") {
-              await github.rest.issues.addAssignees({
+              await octokit.rest.issues.addAssignees({
                 owner: repoOwner,
                 repo: repoName,
                 issue_number: issueNumber,
                 assignees: [commenter]
               });
 
-              await github.rest.issues.createComment({
+              await octokit.rest.issues.createComment({
                 owner: repoOwner,
                 repo: repoName,
                 issue_number: issueNumber,
@@ -38,16 +40,16 @@ jobs:
               });
             }
 
-            // /close
+            // Handle /close command
             if (comment === "/close") {
-              await github.rest.issues.update({
+              await octokit.rest.issues.update({
                 owner: repoOwner,
                 repo: repoName,
                 issue_number: issueNumber,
                 state: "closed"
               });
 
-              await github.rest.issues.createComment({
+              await octokit.rest.issues.createComment({
                 owner: repoOwner,
                 repo: repoName,
                 issue_number: issueNumber,
@@ -55,20 +57,20 @@ jobs:
               });
             }
 
-            // /label wali command
+            // Handle /label command
             if (comment.startsWith("/label ")) {
               const labelName = comment.replace("/label ", "").trim();
 
               if (labelName) {
                 try {
-                  await github.rest.issues.addLabels({
+                  await octokit.rest.issues.addLabels({
                     owner: repoOwner,
                     repo: repoName,
                     issue_number: issueNumber,
                     labels: [labelName]
                   });
 
-                  await github.rest.issues.createComment({
+                  await octokit.rest.issues.createComment({
                     owner: repoOwner,
                     repo: repoName,
                     issue_number: issueNumber,
@@ -76,21 +78,22 @@ jobs:
                   });
                 } catch (error) {
                   if (error.status === 404) {
-                    await github.rest.issues.createLabel({
+                    // If label doesn't exist, create it and add it
+                    await octokit.rest.issues.createLabel({
                       owner: repoOwner,
                       repo: repoName,
                       name: labelName,
                       color: "0e8a16"  # Green color
                     });
 
-                    await github.rest.issues.addLabels({
+                    await octokit.rest.issues.addLabels({
                       owner: repoOwner,
                       repo: repoName,
                       issue_number: issueNumber,
                       labels: [labelName]
                     });
 
-                    await github.rest.issues.createComment({
+                    await octokit.rest.issues.createComment({
                       owner: repoOwner,
                       repo: repoName,
                       issue_number: issueNumber,
