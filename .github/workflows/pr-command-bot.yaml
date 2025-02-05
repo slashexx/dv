@@ -127,20 +127,9 @@ jobs:
               if (comment?.includes("/cc") && action === "created") {
                 try {
                   const reviewers = comment.substring(3).trim().split(/[\s,]+/);
-                  const added = await requestReviews(reviewers);
-                  await github.rest.issues.createComment({
-                    owner: repoOwner,
-                    repo: repoName,
-                    issue_number: prNumber,
-                    body: `✅ Requested review from: ${added.map(r => '@' + r).join(', ')}`
-                  });
+                  await requestReviews(reviewers);
                 } catch (error) {
-                  await github.rest.issues.createComment({
-                    owner: repoOwner,
-                    repo: repoName,
-                    issue_number: prNumber,
-                    body: `❌ Error: ${error.message}`
-                  });
+                  console.error("Error requesting reviews:", error);
                 }
               }
 
@@ -150,20 +139,8 @@ jobs:
                     throw new Error("You cannot LGTM your own pull request");
                   }
                   await handleLabel("lgtm", "0e8a16", "Looks Good To Me");
-                  await github.rest.issues.createComment({
-                    owner: repoOwner,
-                    repo: repoName,
-                    issue_number: prNumber,
-                    body: `✅ @${commenter} has marked this pull request as LGTM`
-                  });
                 } catch (error) {
                   console.error("Error in /lgtm command:", error);
-                  await github.rest.issues.createComment({
-                    owner: repoOwner,
-                    repo: repoName,
-                    issue_number: prNumber,
-                    body: `❌ ${error.message}`
-                  });
                 }
               }
 
@@ -216,24 +193,9 @@ jobs:
                 if (kindMatch) {
                   const kindValue = (kindMatch[1] || kindMatch[2]).toLowerCase();
                   const kindLabel = `kind/${kindValue}`;
-                  try {
-                    await handleLabel(kindLabel, "696969", `PR type: ${kindValue}`);
-                  } catch (error) {
-                    await github.rest.issues.createComment({
-                      owner: repoOwner,
-                      repo: repoName,
-                      issue_number: prNumber,
-                      body: `Failed to add kind label: ${kindLabel}. Please check if the kind type is valid.`
-                    });
-                  }
+                  await handleLabel(kindLabel, "696969", `PR type: ${kindValue}`);
                 }
               }
             } catch (error) {
               console.error("Error processing command:", error);
-              await github.rest.issues.createComment({
-                owner: repoOwner,
-                repo: repoName,
-                issue_number: prNumber,
-                body: `❌ Error: ${error.message}`
-              });
             }
