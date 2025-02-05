@@ -247,32 +247,7 @@ jobs:
                 }
               }
             }
-
-            // /review command for PR - request reviews from others
-            if (comment?.startsWith("/review") && action === "created") {
-              try {
-                const reviewers = comment
-                  .substring(7)
-                  .trim()
-                  .split(/[\s,]+/);
-
-                const added = await requestReviews(reviewers, "/review");
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: prNumber,
-                  body: `✅ Requested review from: ${added.map(r => '@' + r).join(', ')}`
-                });
-              } catch (error) {
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: prNumber,
-                  body: `❌ Error: ${error.message}`
-                });
-              }
-            }
-
+            
             // /cc command for requesting reviews
             if (comment?.startsWith("/cc") && action === "created") {
               try {
