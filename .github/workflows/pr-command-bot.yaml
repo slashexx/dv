@@ -82,28 +82,27 @@ jobs:
               }
             }
 
-            // Helper function to request reviews
-            async function requestReviews(usernames, commandType) {
+            // Simpler helper function to request reviews
+            async function requestReviews(username) {
               if (!isPR) {
-                throw new Error(`${commandType} command can only be used on pull requests`);
+                throw new Error("This command can only be used on pull requests");
               }
 
-              const cleanUsernames = usernames
-                .map(name => name.replace(/^@/, '').trim())
-                .filter(name => name && name !== commenter); // Filter out empty and self-reviews
-
-              if (cleanUsernames.length === 0) {
-                throw new Error('No valid reviewers specified');
+              const reviewer = username.replace(/^@/, '').trim();
+              if (!reviewer) {
+                throw new Error('No reviewer specified');
               }
+
+              console.log("Requesting review from:", reviewer);
 
               await github.rest.pulls.requestReviewers({
                 owner: repoOwner,
                 repo: repoName,
                 pull_number: prNumber,
-                reviewers: cleanUsernames
+                reviewers: [reviewer]
               });
 
-              return cleanUsernames;
+              return reviewer;
             }
 
             // Process /kind flag in PR description
@@ -257,19 +256,19 @@ jobs:
             // /cc command for requesting reviews
             if (comment?.startsWith("/cc") && action === "created") {
               try {
-                const reviewers = comment
-                  .substring(3)  // Remove '/cc'
-                  .trim()
-                  .split(/[\s,]+/);  // Split by whitespace or commas
+                // Extract username - everything after /cc
+                const reviewer = comment.substring(3).trim();
+                console.log("CC command received for reviewer:", reviewer);
 
-                const added = await requestReviews(reviewers, "/cc");
+                const added = await requestReviews(reviewer);
                 await github.rest.issues.createComment({
                   owner: repoOwner,
                   repo: repoName,
                   issue_number: prNumber,
-                  body: `✅ Requested review from: ${added.map(r => '@' + r).join(', ')}`
+                  body: `✅ Requested review from @${added}`
                 });
               } catch (error) {
+                console.error("Error in /cc command:", error);
                 await github.rest.issues.createComment({
                   owner: repoOwner,
                   repo: repoName,
@@ -279,7 +278,7 @@ jobs:
               }
             }
 
-            // /lgtm command for maintainers
+            // /lgtm command - simplified without maintainer check
             if (comment === "/lgtm" && action === "created") {
               try {
                 if (!isPR) {
@@ -292,28 +291,16 @@ jobs:
                   throw new Error("You cannot LGTM your own pull request");
                 }
 
-                if (!(await isMaintainer(commenter))) {
-                  throw new Error("Only maintainers can use the /lgtm command");
-                }
-
-                await handleLabel("lgtm", "0e8a16", "Looks Good To Me - Approved by maintainer");
+                await handleLabel("lgtm", "0e8a16", "Looks Good To Me");
                 
-                // Add approval review
-                await github.rest.pulls.createReview({
-                  owner: repoOwner,
-                  repo: repoName,
-                  pull_number: prNumber,
-                  event: 'APPROVE',
-                  body: '👍 LGTM! Approved by maintainer.'
-                });
-
                 await github.rest.issues.createComment({
                   owner: repoOwner,
                   repo: repoName,
                   issue_number: prNumber,
-                  body: `✅ @${commenter} has approved this pull request with LGTM`
+                  body: `✅ @${commenter} has marked this pull request as LGTM`
                 });
               } catch (error) {
+                console.error("Error in /lgtm command:", error);
                 await github.rest.issues.createComment({
                   owner: repoOwner,
                   repo: repoName,
