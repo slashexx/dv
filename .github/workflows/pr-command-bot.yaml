@@ -76,6 +76,30 @@ jobs:
               }
             }
 
+            // Helper function to request reviews
+            async function requestReviews(usernames, commandType) {
+              if (!isPR) {
+                throw new Error(`${commandType} command can only be used on pull requests`);
+              }
+
+              const cleanUsernames = usernames
+                .map(name => name.replace(/^@/, '').trim())
+                .filter(name => name && name !== commenter); // Filter out empty and self-reviews
+
+              if (cleanUsernames.length === 0) {
+                throw new Error('No valid reviewers specified');
+              }
+
+              await github.rest.pulls.requestReviewers({
+                owner: repoOwner,
+                repo: repoName,
+                pull_number: prNumber,
+                reviewers: cleanUsernames
+              });
+
+              return cleanUsernames;
+            }
+
             // Process /kind flag in PR description
             if ((action === "opened" || action === "edited") && isPR) {
               const description = context.payload.pull_request?.body?.trim() || "";
@@ -225,84 +249,95 @@ jobs:
             }
 
             // /review command for PR - request reviews from others
-            if (comment?.startsWith("/review ") && action === "created") {
-              const reviewers = comment
-                .replace("/review ", "")
-                .trim()
-                .split(" ")
-                .map(r => r.replace("@", ""))
-                .filter(r => r);  // Remove empty strings
+            if (comment?.startsWith("/review") && action === "created") {
+              try {
+                const reviewers = comment
+                  .substring(7)
+                  .trim()
+                  .split(/[\s,]+/);
 
-              if (reviewers.length > 0) {
-                await github.rest.pulls.requestReviewers({
+                const added = await requestReviews(reviewers, "/review");
+                await github.rest.issues.createComment({
                   owner: repoOwner,
                   repo: repoName,
-                  pull_number: prNumber,
-                  reviewers: reviewers
+                  issue_number: prNumber,
+                  body: `✅ Requested review from: ${added.map(r => '@' + r).join(', ')}`
+                });
+              } catch (error) {
+                await github.rest.issues.createComment({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: prNumber,
+                  body: `❌ Error: ${error.message}`
                 });
               }
             }
 
             // /cc command for requesting reviews
             if (comment?.startsWith("/cc") && action === "created") {
-              const reviewers = comment
-                .substring(3)  // Remove '/cc'
-                .trim()
-                .split(/[\s,]+/)  // Split by whitespace or commas
-                .map(r => r.replace(/^@/, "").trim())  // Remove @ and trim
-                .filter(r => r);  // Remove empty strings
+              try {
+                const reviewers = comment
+                  .substring(3)  // Remove '/cc'
+                  .trim()
+                  .split(/[\s,]+/);  // Split by whitespace or commas
 
-              if (reviewers.length > 0) {
-                try {
-                  await github.rest.pulls.requestReviewers({
-                    owner: repoOwner,
-                    repo: repoName,
-                    pull_number: prNumber,
-                    reviewers: reviewers
-                  });
-                } catch (error) {
-                  await github.rest.issues.createComment({
-                    owner: repoOwner,
-                    repo: repoName,
-                    issue_number: prNumber,
-                    body: `Failed to request review from: ${reviewers.join(", ")}. Error: ${error.message}`
-                  });
-                }
+                const added = await requestReviews(reviewers, "/cc");
+                await github.rest.issues.createComment({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: prNumber,
+                  body: `✅ Requested review from: ${added.map(r => '@' + r).join(', ')}`
+                });
+              } catch (error) {
+                await github.rest.issues.createComment({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: prNumber,
+                  body: `❌ Error: ${error.message}`
+                });
               }
             }
 
             // /lgtm command for maintainers
             if (comment === "/lgtm" && action === "created") {
               try {
-                if (await isMaintainer(commenter)) {
-                  await handleLabel(
-                    "lgtm",
-                    "0e8a16",
-                    "Looks Good To Me - Approved by maintainer"
-                  );
-                  
-                  // Add approval review
-                  await github.rest.pulls.createReview({
-                    owner: repoOwner,
-                    repo: repoName,
-                    pull_number: prNumber,
-                    event: 'APPROVE',
-                    body: 'LGTM! 👍'
-                  });
-                } else {
-                  await github.rest.issues.createComment({
-                    owner: repoOwner,
-                    repo: repoName,
-                    issue_number: prNumber,
-                    body: "Only maintainers can use the /lgtm command."
-                  });
+                if (!isPR) {
+                  throw new Error("/lgtm command can only be used on pull requests");
                 }
+
+                // Check if commenter is the PR author
+                const prAuthor = context.payload.pull_request.user.login;
+                if (commenter === prAuthor) {
+                  throw new Error("You cannot LGTM your own pull request");
+                }
+
+                if (!(await isMaintainer(commenter))) {
+                  throw new Error("Only maintainers can use the /lgtm command");
+                }
+
+                await handleLabel("lgtm", "0e8a16", "Looks Good To Me - Approved by maintainer");
+                
+                // Add approval review
+                await github.rest.pulls.createReview({
+                  owner: repoOwner,
+                  repo: repoName,
+                  pull_number: prNumber,
+                  event: 'APPROVE',
+                  body: '👍 LGTM! Approved by maintainer.'
+                });
+
+                await github.rest.issues.createComment({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: prNumber,
+                  body: `✅ @${commenter} has approved this pull request with LGTM`
+                });
               } catch (error) {
                 await github.rest.issues.createComment({
                   owner: repoOwner,
                   repo: repoName,
                   issue_number: prNumber,
-                  body: `Error processing /lgtm command: ${error.message}`
+                  body: `❌ Error: ${error.message}`
                 });
               }
             }
