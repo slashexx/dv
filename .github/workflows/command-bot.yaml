@@ -22,6 +22,7 @@ jobs:
             const repoOwner = context.repo.owner;
             const repoName = context.repo.repo;
 
+            // /assign command
             if (comment === "/assign") {
               await github.rest.issues.addAssignees({
                 owner: repoOwner,
@@ -38,22 +39,58 @@ jobs:
               });
             }
 
-            if (comment === "/close") {
+            // /close command with different statuses
+            if (comment.startsWith("/close ")) {
+              const closeReason = comment.replace("/close ", "").trim();
+
+              let state = "closed";
+              let reason = "";
+
+              if (closeReason === "not-planned") {
+                reason = "Not planned";
+              } else if (closeReason === "completed") {
+                reason = "Completed";
+              } else if (closeReason === "inactive") {
+                reason = "Inactive";
+              } else if (closeReason === "duplicate") {
+                reason = "Duplicate";
+              } else {
+                reason = "Closed"; // Default case
+              }
+
               await github.rest.issues.update({
                 owner: repoOwner,
                 repo: repoName,
                 issue_number: issueNumber,
-                state: "closed"
+                state: state
               });
 
               await github.rest.issues.createComment({
                 owner: repoOwner,
                 repo: repoName,
                 issue_number: issueNumber,
-                body: `✅ Issue #${issueNumber} has been closed by @${commenter}.`
+                body: `✅ Issue #${issueNumber} has been marked as **${reason}** by @${commenter}.`
               });
             }
 
+            // /reopen command
+            if (comment === "/reopen") {
+              await github.rest.issues.update({
+                owner: repoOwner,
+                repo: repoName,
+                issue_number: issueNumber,
+                state: "open"
+              });
+
+              await github.rest.issues.createComment({
+                owner: repoOwner,
+                repo: repoName,
+                issue_number: issueNumber,
+                body: `🔄 Issue #${issueNumber} has been reopened by @${commenter}.`
+              });
+            }
+
+            // /label command
             if (comment.startsWith("/label ")) {
               const labelName = comment.replace("/label ", "").trim();
   
@@ -78,7 +115,7 @@ jobs:
                       owner: repoOwner,
                       repo: repoName,
                       name: labelName,
-                      color: "0e8a16" 
+                      color: "0e8a16" // Green color
                     });
 
                     await github.rest.issues.addLabels({
