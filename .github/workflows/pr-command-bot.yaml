@@ -25,6 +25,12 @@ jobs:
             const repoName = context.repo.repo;
             const action = context.payload.action;
 
+            console.log("Received comment:", comment);
+            console.log("Commenter:", commenter);
+            console.log("Action:", action);
+            console.log("PR Number:", prNumber);
+
+
             const isPR = context.payload.pull_request !== undefined;
 
             // Helper function to check if user is a maintainer
@@ -247,7 +253,7 @@ jobs:
                 }
               }
             }
-            
+
             // /cc command for requesting reviews
             if (comment?.startsWith("/cc") && action === "created") {
               try {
