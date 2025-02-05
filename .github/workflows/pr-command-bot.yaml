@@ -4,7 +4,7 @@ on:
   pull_request_review_comment:
     types: [created]
   pull_request:
-    types: [opened, closed, reopened]
+    types: [opened, closed, reopened, edited]  # Add 'edited' to handle PR description updates
 
 permissions:
   issues: write
@@ -42,6 +42,43 @@ jobs:
               } catch (error) {
                 console.error('Error checking maintainer status:', error);
                 return false;
+              }
+            }
+
+            // Process /kind flag in PR description
+            if ((action === "opened" || action === "edited") && isPR) {
+              const description = context.payload.pull_request?.body?.trim() || "";
+              const kindMatch = description.match(/\/kind\s+(\S+)/i);
+              
+              if (kindMatch) {
+                const kindLabel = `kind/${kindMatch[1].toLowerCase()}`;
+                
+                try {
+                  await github.rest.issues.addLabels({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: prNumber,
+                    labels: [kindLabel]
+                  });
+                } catch (error) {
+                  if (error.status === 404) {
+                    // Create the kind label if it doesn't exist
+                    await github.rest.issues.createLabel({
+                      owner: repoOwner,
+                      repo: repoName,
+                      name: kindLabel,
+                      color: "696969",  // Dark gray
+                      description: `PR type: ${kindMatch[1]}`
+                    });
+
+                    await github.rest.issues.addLabels({
+                      owner: repoOwner,
+                      repo: repoName,
+                      issue_number: prNumber,
+                      labels: [kindLabel]
+                    });
+                  }
+                }
               }
             }
 
@@ -202,6 +239,32 @@ jobs:
               }
             }
 
+            // /cc command for requesting reviews
+            if (comment?.startsWith("/cc ") && action === "created") {
+              const reviewers = comment
+                .replace("/cc ", "")
+                .trim()
+                .split(" ")
+                .map(r => r.replace("@", ""))
+                .filter(r => r);
+
+              if (reviewers.length > 0) {
+                await github.rest.pulls.requestReviewers({
+                  owner: repoOwner,
+                  repo: repoName,
+                  pull_number: prNumber,
+                  reviewers: reviewers
+                });
+
+                await github.rest.issues.createComment({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: prNumber,
+                  body: `👋 CC'd ${reviewers.map(r => `@${r}`).join(", ")} for review`
+                });
+              }
+            }
+
             // /lgtm command for maintainers
             if (comment === "/lgtm" && action === "created") {
               if (await isMaintainer(commenter)) {
@@ -253,6 +316,85 @@ jobs:
                   repo: repoName,
                   issue_number: prNumber,
                   body: `❌ Sorry @${commenter}, only maintainers can use the \`/lgtm\` command.`
+                });
+              }
+            }
+
+            // /approve command for maintainers
+            if (comment?.startsWith("/approve") && action === "created") {
+              if (await isMaintainer(commenter)) {
+                const isCancel = comment.includes("cancel");
+                const approvedLabel = "approved";
+                
+                if (isCancel) {
+                  try {
+                    await github.rest.issues.removeLabel({
+                      owner: repoOwner,
+                      repo: repoName,
+                      issue_number: prNumber,
+                      name: approvedLabel
+                    });
+
+                    await github.rest.issues.createComment({
+                      owner: repoOwner,
+                      repo: repoName,
+                      issue_number: prNumber,
+                      body: `❌ Approval cancelled by @${commenter}`
+                    });
+                  } catch (error) {
+                    if (error.status !== 404) { // Ignore if label doesn't exist
+                      throw error;
+                    }
+                  }
+                } else {
+                  try {
+                    await github.rest.issues.addLabels({
+                      owner: repoOwner,
+                      repo: repoName,
+                      issue_number: prNumber,
+                      labels: [approvedLabel]
+                    });
+
+                    await github.rest.issues.createComment({
+                      owner: repoOwner,
+                      repo: repoName,
+                      issue_number: prNumber,
+                      body: `✅ PR approved by @${commenter}`
+                    });
+                  } catch (error) {
+                    if (error.status === 404) {
+                      await github.rest.issues.createLabel({
+                        owner: repoOwner,
+                        repo: repoName,
+                        name: approvedLabel,
+                        color: "28a745", // GitHub green
+                        description: "Pull request has been approved by a maintainer"
+                      });
+
+                      await github.rest.issues.addLabels({
+                        owner: repoOwner,
+                        repo: repoName,
+                        issue_number: prNumber,
+                        labels: [approvedLabel]
+                      });
+
+                      await github.rest.issues.createComment({
+                        owner: repoOwner,
+                        repo: repoName,
+                        issue_number: prNumber,
+                        body: `✅ PR approved by @${commenter}`
+                      });
+                    } else {
+                      throw error;
+                    }
+                  }
+                }
+              } else {
+                await github.rest.issues.createComment({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: prNumber,
+                  body: `❌ Sorry @${commenter}, only maintainers can use the \`/approve\` command.`
                 });
               }
             }
