@@ -78,7 +78,7 @@ jobs:
                       owner: repoOwner,
                       repo: repoName,
                       name: labelName,
-                      color: "0e8a16"  # Green color
+                      color: "0e8a16" 
                     });
 
                     await github.rest.issues.addLabels({
