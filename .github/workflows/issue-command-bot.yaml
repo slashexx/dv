@@ -22,11 +22,6 @@ jobs:
             const repoOwner = context.repo.owner;
             const repoName = context.repo.repo;
 
-            console.log("Received comment:", comment);
-            console.log("Commenter:", commenter);
-            console.log("Issue Number:", issueNumber);
-
-            // Helper function to handle labels
             async function handleLabel(labelName, color, description) {
               try {
                 await github.rest.issues.addLabels({
@@ -44,7 +39,6 @@ jobs:
                     color: color || "0e8a16",
                     description: description || ""
                   });
-                  
                   await github.rest.issues.addLabels({
                     owner: repoOwner,
                     repo: repoName,
@@ -57,106 +51,115 @@ jobs:
               }
             }
 
-            // Helper function to extract command and args from comment
             function parseCommand(comment, cmd) {
               if (!comment?.includes(cmd)) return null;
               const cmdIndex = comment.indexOf(cmd);
-              const afterCmd = comment.substring(cmdIndex + cmd.length).trim();
-              return afterCmd || null;
+              return comment.substring(cmdIndex + cmd.length).trim() || null;
             }
 
             try {
-              // /assign command
               if (comment?.includes("/assign")) {
-                await github.rest.issues.addAssignees({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: issueNumber,
-                  assignees: [commenter]
-                });
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: issueNumber,
-                  body: `✅ @${commenter} has been assigned to this issue`
-                });
-              }
-
-              // /close command
-              if (comment?.includes("/close")) {
-                await github.rest.issues.update({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: issueNumber,
-                  state: "closed",
-                  state_reason: "completed"
-                });
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: issueNumber,
-                  body: `✅ Issue closed by @${commenter}`
-                });
-              }
-
-              // /reopen command
-              if (comment?.includes("/reopen")) {
-                await github.rest.issues.update({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: issueNumber,
-                  state: "open"
-                });
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: issueNumber,
-                  body: `✅ Issue reopened by @${commenter}`
-                });
-              }
-
-              // /label command
-              if (comment?.includes("/label")) {
-                const labelName = parseCommand(comment, "/label");
-                if (labelName) {
-                  await handleLabel(labelName, "0e8a16");
+                try {
+                  await github.rest.issues.addAssignees({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: issueNumber,
+                    assignees: [commenter]
+                  });
+                } catch (error) {
                   await github.rest.issues.createComment({
                     owner: repoOwner,
                     repo: repoName,
                     issue_number: issueNumber,
-                    body: `✅ Added label: ${labelName}`
+                    body: `❌ Failed to assign: ${error.message} !`
                   });
                 }
               }
 
-              // /help command
-              if (comment?.includes("/help")) {
-                await handleLabel("help wanted", "008672", "Extra attention is needed");
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: issueNumber,
-                  body: `✅ Marked as needing help`
-                });
+              if (comment?.includes("/close")) {
+                try {
+                  await github.rest.issues.update({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: issueNumber,
+                    state: "closed",
+                    state_reason: "completed"
+                  });
+                } catch (error) {
+                  await github.rest.issues.createComment({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: issueNumber,
+                    body: `❌ Failed to close issue: ${error.message} !`
+                  });
+                }
               }
 
-              // /needs-triage command
+              if (comment?.includes("/reopen")) {
+                try {
+                  await github.rest.issues.update({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: issueNumber,
+                    state: "open"
+                  });
+                } catch (error) {
+                  await github.rest.issues.createComment({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: issueNumber,
+                    body: `❌ Failed to reopen issue: ${error.message} !`
+                  });
+                }
+              }
+
+              if (comment?.includes("/label")) {
+                try {
+                  const labelName = parseCommand(comment, "/label");
+                  if (labelName) {
+                    await handleLabel(labelName, "0e8a16");
+                  }
+                } catch (error) {
+                  await github.rest.issues.createComment({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: issueNumber,
+                    body: `❌ Failed to add label: ${error.message} !`
+                  });
+                }
+              }
+
+              if (comment?.includes("/help")) {
+                try {
+                  await handleLabel("help wanted", "008672", "Extra attention is needed");
+                } catch (error) {
+                  await github.rest.issues.createComment({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: issueNumber,
+                    body: `❌ Failed to add help label: ${error.message} !`
+                  });
+                }
+              }
+
               if (comment?.includes("/needs-triage")) {
-                await handleLabel("needs-triage", "d73a4a", "This issue needs triage");
-                await github.rest.issues.createComment({
-                  owner: repoOwner,
-                  repo: repoName,
-                  issue_number: issueNumber,
-                  body: `✅ Marked for triage`
-                });
+                try {
+                  await handleLabel("needs-triage", "d73a4a", "This issue needs triage");
+                } catch (error) {
+                  await github.rest.issues.createComment({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: issueNumber,
+                    body: `❌ Failed to add triage label: ${error.message} !`
+                  });
+                }
               }
 
             } catch (error) {
-              console.error("Error processing command:", error);
               await github.rest.issues.createComment({
                 owner: repoOwner,
                 repo: repoName,
                 issue_number: issueNumber,
-                body: `❌ Error: ${error.message}`
+                body: `❌ ${error.message} !`
               });
             }
