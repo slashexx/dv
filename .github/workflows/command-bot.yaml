@@ -39,6 +39,7 @@ jobs:
               });
             }
 
+            // /close command with specific reasons
             if (comment.startsWith("/close ")) {
               const closeReason = comment.replace("/close ", "").trim();
 
