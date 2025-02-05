@@ -20,7 +20,7 @@ jobs:
           script: |
             const comment = context.payload.comment?.body?.trim().toLowerCase();
             const commenter = context.payload.comment?.user?.login;
-            const prNumber = context.issue.number;
+            const prNumber = context.payload.pull_request?.number;  # Fix here
             const repoOwner = context.repo.owner;
             const repoName = context.repo.repo;
             const action = context.payload.action;
@@ -119,7 +119,7 @@ jobs:
                   await github.rest.issues.addLabels({
                     owner: repoOwner,
                     repo: repoName,
-                    issue_number: prNumber,
+                    issue_number: prNumber,  # Should use prNumber here, no change needed
                     labels: [labelName]
                   });
 
